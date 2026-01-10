@@ -4,6 +4,7 @@ import { CasesProvider } from './context/CasesContext';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
 import { MyCases } from './pages/MyCases';
 import { NewCaseStep1 } from './pages/NewCaseStep1';
 import { NewCaseStep2 } from './pages/NewCaseStep2';
@@ -13,7 +14,16 @@ import { MTBDetail } from './pages/MTBDetail';
 import { ViewCase } from './pages/ViewCase';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    );
+  }
+  
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
 }
 
@@ -26,6 +36,7 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
             <Route
               path="/my-cases"

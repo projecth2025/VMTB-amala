@@ -4,40 +4,55 @@ import { Plus, Users, FileText } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { Modal } from '../components/Modal';
 import { useCases } from '../context/CasesContext';
+import { useAuth } from '../context/AuthContext';
 
 export function MTBs() {
   const navigate = useNavigate();
-  const { mtbs, addMTB } = useCases();
+  const { mtbs, createMTB, joinMTB, loading } = useCases();
+  const { user } = useAuth();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [mtbName, setMtbName] = useState('');
   const [mtbCode, setMtbCode] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleCreateMTB = () => {
-    if (mtbName.trim()) {
-      const newMTB = {
-        id: Date.now().toString(),
-        name: mtbName,
-        experts: 1,
-        cases: [],
-      };
-      addMTB(newMTB);
+  // Sort MTBs: owner's MTBs first, then others
+  const sortedMtbs = [...mtbs].sort((a, b) => {
+    const aIsOwner = a.ownerId === user?.id;
+    const bIsOwner = b.ownerId === user?.id;
+    if (aIsOwner && !bIsOwner) return -1;
+    if (!aIsOwner && bIsOwner) return 1;
+    return 0;
+  });
+
+  const handleCreateMTB = async () => {
+    if (!mtbName.trim()) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      await createMTB(mtbName);
       setMtbName('');
       setShowCreateModal(false);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to create MTB');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleJoinMTB = () => {
-    if (mtbCode.trim()) {
-      const mockMTB = {
-        id: Date.now().toString(),
-        name: 'Joined MTB',
-        experts: 15,
-        cases: [],
-      };
-      addMTB(mockMTB);
+  const handleJoinMTB = async () => {
+    if (!mtbCode.trim()) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      await joinMTB(mtbCode);
       setMtbCode('');
       setShowJoinModal(false);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to join MTB');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -64,15 +79,29 @@ export function MTBs() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {mtbs.map((mtb) => (
-            <div
-              key={mtb.id}
-              onClick={() => navigate(`/mtb/${mtb.id}`)}
-              className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow cursor-pointer p-6"
-            >
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">{mtb.name}</h3>
-              <div className="space-y-2">
+        {loading ? (
+          <div className="text-center py-12 text-gray-500">Loading MTBs...</div>
+        ) : mtbs.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">No MTBs yet. Create or join one!</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {sortedMtbs.map((mtb) => {
+              const isOwner = mtb.ownerId === user?.id;
+              return (
+                <div
+                  key={mtb.id}
+                  onClick={() => navigate(`/mtb/${mtb.id}`)}
+                  className={`rounded-lg shadow hover:shadow-lg transition-shadow cursor-pointer p-6 ${
+                    isOwner ? 'bg-gray-100 border-2 border-gray-300' : 'bg-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">{mtb.name}</h3>
+                    {isOwner && (
+                      <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">Owner</span>
+                    )}
+                  </div>
+                  <div className="space-y-2">
                 <div className="flex items-center space-x-2 text-sm text-gray-600">
                   <Users className="w-4 h-4" />
                   <span>{mtb.experts} Experts</span>
@@ -83,8 +112,10 @@ export function MTBs() {
                 </div>
               </div>
             </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <Modal
@@ -106,18 +137,21 @@ export function MTBs() {
               placeholder="e.g., Thoracic Oncology Board"
             />
           </div>
+          {error && <div className="text-red-600 text-sm">{error}</div>}
           <div className="flex justify-end space-x-3">
             <button
               onClick={() => setShowCreateModal(false)}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+              disabled={submitting}
+              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={handleCreateMTB}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              disabled={submitting}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Create
+              {submitting ? 'Creating...' : 'Create'}
             </button>
           </div>
         </div>
@@ -142,18 +176,21 @@ export function MTBs() {
               placeholder="Enter MTB invitation code"
             />
           </div>
+          {error && <div className="text-red-600 text-sm">{error}</div>}
           <div className="flex justify-end space-x-3">
             <button
               onClick={() => setShowJoinModal(false)}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+              disabled={submitting}
+              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={handleJoinMTB}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              disabled={submitting}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Join
+              {submitting ? 'Joining...' : 'Join'}
             </button>
           </div>
         </div>

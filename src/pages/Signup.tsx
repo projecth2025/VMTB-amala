@@ -13,15 +13,25 @@ export function Signup() {
   const [phone, setPhone] = useState('');
   const navigate = useNavigate();
   const { signup } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
       alert('Passwords do not match');
       return;
     }
-    signup(name, email, password);
-    navigate('/login');
+    setError(null);
+    setLoading(true);
+    try {
+      await signup({ name, email, password, profession, hospital, phone });
+      navigate('/login');
+    } catch (err: any) {
+      setError(err?.message || 'Signup failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -141,11 +151,14 @@ export function Signup() {
               />
             </div>
 
+            {error && <div className="text-sm text-red-600">{error}</div>}
+
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-colors font-medium"
+              disabled={loading}
+              className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Create Account
+              {loading ? 'Creating Account...' : 'Create Account'}
             </button>
           </form>
 

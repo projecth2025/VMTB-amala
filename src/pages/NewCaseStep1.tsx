@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
+import { supabase } from '../Supabase/client';
 
 const cancerTypes = [
   'Lung Adenocarcinoma',
@@ -18,6 +19,31 @@ const cancerTypes = [
   'Other',
 ];
 
+const generateCaseName = async (cancerType: string): Promise<string> => {
+  if (!cancerType) return '';
+  
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = now.getFullYear();
+  const dateStr = `${day}${month}${year}`;
+  
+  // Count cases created today
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+  
+  const { count } = await supabase
+    .from('cases')
+    .select('*', { count: 'exact', head: true })
+    .gte('created_at', todayStart.toISOString())
+    .lt('created_at', todayEnd.toISOString());
+  
+  const caseNumber = (count || 0) + 1;
+  // Remove spaces from cancer type
+  const compactCancerType = cancerType.replace(/\s+/g, '');
+  return `${compactCancerType}-${dateStr}-${caseNumber}`;
+};
+
 export function NewCaseStep1() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
@@ -27,11 +53,50 @@ export function NewCaseStep1() {
     sex: '',
     cancerType: '',
   });
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Auto-generate case name when cancer type changes
+  useEffect(() => {
+    const generateName = async () => {
+      if (formData.cancerType) {
+        const generatedName = await generateCaseName(formData.cancerType);
+        setFormData(prev => ({ ...prev, caseName: generatedName }));
+      }
+    };
+    generateName();
+  }, [formData.cancerType]);
+
+  const isCaseNameUnique = async (caseName: string): Promise<boolean> => {
+    const { data, error: dbError } = await supabase
+      .from('cases')
+      .select('id')
+      .eq('case_name', caseName)
+      .maybeSingle();
+    
+    if (dbError) throw dbError;
+    return !data; // Returns true if no case with this name exists
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    sessionStorage.setItem('newCaseStep1', JSON.stringify(formData));
-    navigate('/cases/new/step-2');
+    setError(null);
+    setLoading(true);
+
+    try {
+      const isUnique = await isCaseNameUnique(formData.caseName);
+      if (!isUnique) {
+        setError('This case name already exists. Please choose a different name.');
+        return;
+      }
+      
+      sessionStorage.setItem('newCaseStep1', JSON.stringify(formData));
+      navigate('/cases/new/step-2');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to validate case name');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -44,6 +109,7 @@ export function NewCaseStep1() {
 
         <div className="bg-white rounded-lg shadow p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
+            {error && <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">{error}</div>}
             <div>
               <label htmlFor="caseName" className="block text-sm font-medium text-gray-700 mb-1">
                 Case Name <span className="text-red-500">*</span>
@@ -54,7 +120,7 @@ export function NewCaseStep1() {
                 value={formData.caseName}
                 onChange={(e) => setFormData({ ...formData, caseName: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g., Lung Cancer - EGFR Mutation"
+                placeholder="Auto-generated based on cancer type"
                 required
               />
             </div>
@@ -137,9 +203,10 @@ export function NewCaseStep1() {
               </button>
               <button
                 type="submit"
-                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                disabled={loading}
+                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Next
+                {loading ? 'Validating...' : 'Next'}
               </button>
             </div>
           </form>

@@ -4,73 +4,125 @@ import { Upload, FileText, Plus, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { Modal } from '../components/Modal';
 import { Document } from '../context/CasesContext';
+import { supabase } from '../Supabase/client';
+
+interface PendingFile {
+  id: string;
+  file: File;
+  type: 'NGS' | 'Clinical' | 'Text';
+  name: string;
+  size: string;
+}
 
 export function NewCaseStep2() {
   const navigate = useNavigate();
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [showTextModal, setShowTextModal] = useState(false);
   const [textContent, setTextContent] = useState('');
   const [textTitle, setTextTitle] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleFileUpload = (type: 'NGS' | 'Clinical') => {
-    const mockFile: Document = {
+  const handleFileUpload = (type: 'NGS' | 'Clinical', event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    const pendingFile: PendingFile = {
       id: Date.now().toString(),
-      name: `${type}_Document_${Date.now()}.pdf`,
-      size: `${(Math.random() * 5 + 1).toFixed(1)} MB`,
+      file,
       type,
+      name: file.name,
+      size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
     };
-    setDocuments([...documents, mockFile]);
+    setPendingFiles([...pendingFiles, pendingFile]);
+    event.target.value = ''; // Reset input to allow same file again
   };
 
   const handleSaveText = () => {
-    const textDoc: Document = {
+    if (!textContent.trim()) return;
+    
+    const blob = new Blob([textContent], { type: 'text/plain' });
+    const file = new File([blob], `${textTitle || 'text_document'}.txt`, { type: 'text/plain' });
+    
+    const pendingFile: PendingFile = {
       id: Date.now().toString(),
-      name: textTitle || 'Text Document',
-      size: `${(textContent.length / 1024).toFixed(1)} KB`,
+      file,
       type: 'Text',
+      name: textTitle || 'Text Document',
+      size: `${(textContent.length / 1024).toFixed(2)} KB`,
     };
-    setDocuments([...documents, textDoc]);
+    setPendingFiles([...pendingFiles, pendingFile]);
     setTextContent('');
     setTextTitle('');
     setShowTextModal(false);
   };
 
   const removeDocument = (id: string) => {
-    setDocuments(documents.filter(doc => doc.id !== id));
+    setPendingFiles(pendingFiles.filter(file => file.id !== id));
   };
 
-  const handleNext = () => {
-    sessionStorage.setItem('newCaseDocuments', JSON.stringify(documents));
-    navigate('/cases/review');
+  const handleNext = async () => {
+    if (pendingFiles.length === 0) {
+      navigate('/cases/review');
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+    
+    try {
+      const uploadedDocuments: Document[] = [];
+      
+      for (const pending of pendingFiles) {
+        const fileName = `${Date.now()}_${pending.file.name}`;
+        const { data, error: uploadError } = await supabase.storage
+          .from('case-documents')
+          .upload(fileName, pending.file);
+        
+        if (uploadError) throw uploadError;
+        
+        uploadedDocuments.push({
+          id: pending.id,
+          name: pending.name,
+          size: pending.size,
+          type: pending.type,
+          storagePath: data.path,
+        });
+      }
+      
+      sessionStorage.setItem('newCaseDocuments', JSON.stringify(uploadedDocuments));
+      navigate('/cases/review');
+    } catch (err: any) {
+      setError(err?.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Add New Case</h1>
-          <p className="text-sm text-gray-600 mt-1">Step 2 of 2: Documents</p>
+      <div className="max-w-4xl mx-auto py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Upload Data & Documents</h1>
+          <p className="text-gray-600 mt-2">Add relevant genomic data and clinical documents</p>
         </div>
 
         <div className="space-y-6">
+          {error && <div className="text-red-600 text-sm">{error}</div>}
           <div className="grid grid-cols-3 gap-4">
-            <button
-              onClick={() => handleFileUpload('NGS')}
-              className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-500 hover:bg-blue-50 transition-all group"
-            >
+            <label className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-500 hover:bg-blue-50 transition-all group cursor-pointer">
+              <input type="file" className="hidden" onChange={(e) => handleFileUpload('NGS', e)} accept="*" />
               <Upload className="w-8 h-8 text-gray-400 group-hover:text-blue-600 mx-auto mb-2" />
               <h3 className="text-sm font-medium text-gray-900 mb-1">Upload NGS Data</h3>
-              <p className="text-xs text-gray-500">Drag & drop or click to upload</p>
-            </button>
+              <p className="text-xs text-gray-500">Any file type</p>
+            </label>
 
-            <button
-              onClick={() => handleFileUpload('Clinical')}
-              className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-500 hover:bg-blue-50 transition-all group"
-            >
+            <label className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-500 hover:bg-blue-50 transition-all group cursor-pointer">
+              <input type="file" className="hidden" onChange={(e) => handleFileUpload('Clinical', e)} accept="*" />
               <FileText className="w-8 h-8 text-gray-400 group-hover:text-blue-600 mx-auto mb-2" />
               <h3 className="text-sm font-medium text-gray-900 mb-1">Upload Other Documents</h3>
-              <p className="text-xs text-gray-500">Clinical reports, images, etc.</p>
-            </button>
+              <p className="text-xs text-gray-500">Any file type</p>
+            </label>
 
             <button
               onClick={() => setShowTextModal(true)}
@@ -82,11 +134,11 @@ export function NewCaseStep2() {
             </button>
           </div>
 
-          {documents.length > 0 && (
+          {pendingFiles.length > 0 && (
             <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Uploaded Documents</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Files Ready to Upload ({pendingFiles.length})</h3>
               <div className="space-y-2">
-                {documents.map((doc) => (
+                {pendingFiles.map((doc) => (
                   <div
                     key={doc.id}
                     className="flex items-center justify-between p-3 bg-gray-50 rounded-md"
@@ -132,9 +184,10 @@ export function NewCaseStep2() {
             </button>
             <button
               onClick={handleNext}
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              disabled={uploading}
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Next
+              {uploading ? 'Uploading...' : 'Next'}
             </button>
           </div>
         </div>

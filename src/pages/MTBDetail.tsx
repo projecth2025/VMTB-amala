@@ -1,20 +1,65 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Eye } from 'lucide-react';
+import { Plus, Eye, Copy, Check } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { Modal } from '../components/Modal';
-import { useCases } from '../context/CasesContext';
+import { useCases, Case } from '../context/CasesContext';
+import { supabase } from '../Supabase/client';
+import { useAuth } from '../context/AuthContext';
 
 export function MTBDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { cases, mtbs, addCaseToMTB } = useCases();
+  const { user } = useAuth();
   const [showAddCaseModal, setShowAddCaseModal] = useState(false);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
+  const [mtbCases, setMtbCases] = useState<Case[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const mtb = mtbs.find((m) => m.id === id);
-  const mtbCases = cases.filter((c) => mtb?.cases.includes(c.id));
+  const isOwner = mtb?.ownerId === user?.id;
   const availableCases = cases.filter((c) => !mtb?.cases.includes(c.id));
+
+  const handleCopyCode = () => {
+    if (mtb?.joinCode) {
+      navigator.clipboard.writeText(mtb.joinCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  useEffect(() => {
+    const fetchMTBCases = async () => {
+      if (!id) return;
+      setLoading(true);
+      try {
+        const { data: mtbCaseIds } = await supabase.from('mtb_cases').select('case_id').eq('mtb_id', id);
+        const caseIds = (mtbCaseIds || []).map(mc => mc.case_id);
+        if (caseIds.length > 0) {
+          const { data: casesData } = await supabase.from('cases').select('*').in('id', caseIds);
+          setMtbCases((casesData || []).map(row => ({
+            id: row.id,
+            caseName: row.case_name,
+            patientName: row.patient_name,
+            age: row.age,
+            sex: row.sex,
+            cancerType: row.cancer_type,
+            createdDate: row.created_at.split('T')[0],
+            ownerId: row.owner_id,
+          })));
+        } else {
+          setMtbCases([]);
+        }
+      } catch (err) {
+        console.error('Failed to fetch MTB cases:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMTBCases();
+  }, [id, mtbs]);
 
   const toggleCaseSelection = (caseId: string) => {
     setSelectedCaseIds((prev) =>
@@ -22,13 +67,29 @@ export function MTBDetail() {
     );
   };
 
-  const handleAddCases = () => {
+  const handleAddCases = async () => {
     if (id) {
-      selectedCaseIds.forEach((caseId) => {
-        addCaseToMTB(id, caseId);
-      });
+      for (const caseId of selectedCaseIds) {
+        await addCaseToMTB(id, caseId);
+      }
       setSelectedCaseIds([]);
       setShowAddCaseModal(false);
+      // Refetch MTB cases
+      const { data: mtbCaseIds } = await supabase.from('mtb_cases').select('case_id').eq('mtb_id', id);
+      const caseIds = (mtbCaseIds || []).map(mc => mc.case_id);
+      if (caseIds.length > 0) {
+        const { data: casesData } = await supabase.from('cases').select('*').in('id', caseIds);
+        setMtbCases((casesData || []).map(row => ({
+          id: row.id,
+          caseName: row.case_name,
+          patientName: row.patient_name,
+          age: row.age,
+          sex: row.sex,
+          cancerType: row.cancer_type,
+          createdDate: row.created_at.split('T')[0],
+          ownerId: row.owner_id,
+        })));
+      }
     }
   };
 
@@ -49,6 +110,21 @@ export function MTBDetail() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{mtb.name}</h1>
             <p className="text-sm text-gray-600 mt-1">{mtb.experts} experts participating</p>
+            {isOwner && mtb.joinCode && (
+              <div className="mt-3 flex items-center space-x-2">
+                <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 flex items-center space-x-2">
+                  <span className="text-sm font-mono font-semibold text-blue-900">{mtb.joinCode}</span>
+                  <button
+                    onClick={handleCopyCode}
+                    className="text-blue-600 hover:text-blue-700 transition-colors"
+                    title="Copy join code"
+                  >
+                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+                <span className="text-xs text-gray-500">Share this code to invite members</span>
+              </div>
+            )}
           </div>
           <button
             onClick={() => setShowAddCaseModal(true)}
@@ -59,7 +135,11 @@ export function MTBDetail() {
           </button>
         </div>
 
-        {mtbCases.length === 0 ? (
+        {loading ? (
+          <div className="bg-white rounded-lg shadow p-12 text-center">
+            <p className="text-gray-600">Loading cases...</p>
+          </div>
+        ) : mtbCases.length === 0 ? (
           <div className="bg-white rounded-lg shadow p-12 text-center">
             <p className="text-gray-600 mb-4">No cases shared in this MTB yet</p>
             <button

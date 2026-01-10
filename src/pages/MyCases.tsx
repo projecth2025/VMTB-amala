@@ -5,7 +5,7 @@ import { useCases } from '../context/CasesContext';
 
 export function MyCases() {
   const navigate = useNavigate();
-  const { cases } = useCases();
+  const { cases, loading } = useCases();
 
   return (
     <Layout>
@@ -46,7 +46,11 @@ export function MyCases() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {cases.map((caseItem) => (
+              {loading ? (
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">Loading cases...</td></tr>
+              ) : cases.length === 0 ? (
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">No cases yet. Create your first case!</td></tr>
+              ) : cases.map((caseItem) => (
                 <tr key={caseItem.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {caseItem.caseName}

@@ -1,38 +1,92 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
+import { supabase } from '../Supabase/client';
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  user: { name: string; email: string } | null;
-  login: (email: string, password: string) => void;
-  signup: (name: string, email: string, password: string) => void;
-  logout: () => void;
+  user: { id: string; email: string | null; name?: string } | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  signup: (params: {
+    name: string;
+    email: string;
+    password: string;
+    profession?: string;
+    hospital?: string;
+    phone?: string;
+  }) => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [user, setUser] = useState<{ id: string; email: string | null; name?: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const isAuthenticated = !!user;
 
-  const login = (email: string, password: string) => {
-    setIsAuthenticated(true);
-    setUser({ name: 'Dr. John Smith', email });
+  useEffect(() => {
+    // Load initial session
+    supabase.auth.getSession().then(({ data }) => {
+      const u = data.session?.user;
+      if (u) setUser({ id: u.id, email: u.email ?? null });
+      setLoading(false);
+    });
+    // Subscribe to auth state changes
+    const { data: authSub } = supabase.auth.onAuthStateChange((_event, session) => {
+      const u = session?.user;
+      if (u) {
+        setUser({ id: u.id, email: u.email ?? null });
+      } else {
+        setUser(null);
+      }
+    });
+    return () => authSub.subscription.unsubscribe();
+  }, []);
+
+  const login = async (email: string, password: string) => {
+    const { error, data } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    const u = data.user;
+    if (u) setUser({ id: u.id, email: u.email ?? null });
   };
 
-  const signup = (name: string, email: string, password: string) => {
-    setUser({ name, email });
+  const signup = async ({ name, email, password, profession, hospital, phone }: {
+    name: string; email: string; password: string; profession?: string; hospital?: string; phone?: string;
+  }) => {
+    const { error, data } = await supabase.auth.signUp({ email, password });
+    if (error) throw error;
+    const u = data.user;
+    if (u) {
+      setUser({ id: u.id, email: u.email ?? null, name });
+      // Create profile record
+      await supabase.from('profiles').upsert({
+        id: u.id,
+        email: u.email,
+        name,
+        profession,
+        hospital,
+        phone,
+      }, { onConflict: 'id' });
+    }
   };
 
-  const logout = () => {
-    setIsAuthenticated(false);
+  const requestPasswordReset = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + '/reset-password',
+    });
+    if (error) throw error;
+  };
+
+  const logout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
     setUser(null);
   };
 
-  return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, signup, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const value = useMemo(() => ({ isAuthenticated, user, loading, login, signup, requestPasswordReset, logout }), [isAuthenticated, user, loading]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

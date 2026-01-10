@@ -9,10 +9,21 @@ export function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    login(email, password);
-    navigate('/my-cases');
+    setError(null);
+    setLoading(true);
+    try {
+      await login(email, password);
+      navigate('/my-cases');
+    } catch (err: any) {
+      setError(err?.message || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -57,11 +68,16 @@ export function Login() {
               />
             </div>
 
+            {error && (
+              <div className="text-sm text-red-600">{error}</div>
+            )}
+
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-colors font-medium"
+              disabled={loading}
+              className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Login
+              {loading ? 'Logging in...' : 'Login'}
             </button>
           </form>
 

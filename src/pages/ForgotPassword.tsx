@@ -1,14 +1,27 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Stethoscope, CheckCircle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { requestPasswordReset } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setError(null);
+    setLoading(true);
+    try {
+      await requestPasswordReset(email);
+      setSubmitted(true);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to send reset link');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -44,11 +57,13 @@ export function ForgotPassword() {
                   />
                 </div>
 
+                {error && <div className="text-sm text-red-600">{error}</div>}
                 <button
                   type="submit"
-                  className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-colors font-medium"
+                  disabled={loading}
+                  className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Send Reset Link
+                  {loading ? 'Sending...' : 'Send Reset Link'}
                 </button>
               </form>
             </>

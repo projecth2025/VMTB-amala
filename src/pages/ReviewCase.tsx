@@ -3,13 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { useCases } from '../context/CasesContext';
+import { Document } from '../context/CasesContext';
 
 export function ReviewCase() {
   const navigate = useNavigate();
-  const { addCase } = useCases();
+  const { createCase } = useCases();
   const [summary, setSummary] = useState('');
   const [questions, setQuestions] = useState<string[]>([]);
   const [newQuestion, setNewQuestion] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const step1Data = sessionStorage.getItem('newCaseStep1');
@@ -31,25 +34,34 @@ export function ReviewCase() {
     setQuestions(questions.filter((_, i) => i !== index));
   };
 
-  const handleCreateCase = () => {
-    const step1Data = JSON.parse(sessionStorage.getItem('newCaseStep1') || '{}');
-    const documents = JSON.parse(sessionStorage.getItem('newCaseDocuments') || '[]');
+  const handleCreateCase = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const step1Data = JSON.parse(sessionStorage.getItem('newCaseStep1') || '{}');
+      const documents: Document[] = JSON.parse(sessionStorage.getItem('newCaseDocuments') || '[]');
 
-    const newCase = {
-      id: Date.now().toString(),
-      ...step1Data,
-      age: parseInt(step1Data.age),
-      createdDate: new Date().toISOString().split('T')[0],
-      summary,
-      questions,
-      documents,
-      opinions: [],
-    };
-
-    addCase(newCase);
-    sessionStorage.removeItem('newCaseStep1');
-    sessionStorage.removeItem('newCaseDocuments');
-    navigate('/my-cases');
+      await createCase(
+        {
+          caseName: step1Data.caseName,
+          patientName: step1Data.patientName,
+          age: parseInt(step1Data.age),
+          sex: step1Data.sex,
+          cancerType: step1Data.cancerType,
+          summary,
+          finalized: true,
+        },
+        documents,
+        questions
+      );
+      sessionStorage.removeItem('newCaseStep1');
+      sessionStorage.removeItem('newCaseDocuments');
+      navigate('/my-cases');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to create case');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -113,18 +125,22 @@ export function ReviewCase() {
             </div>
           </div>
 
+          {error && <div className="text-red-600 text-sm">{error}</div>}
+
           <div className="flex justify-end space-x-3">
             <button
               onClick={() => navigate('/cases/new/step-2')}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+              disabled={loading}
+              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
               Back
             </button>
             <button
               onClick={handleCreateCase}
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              disabled={loading}
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Create Case
+              {loading ? 'Creating...' : 'Create Case'}
             </button>
           </div>
         </div>
