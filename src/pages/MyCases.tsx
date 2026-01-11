@@ -1,11 +1,50 @@
 import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { Plus, Eye } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { useCases } from '../context/CasesContext';
+import { supabase } from '../Supabase/client';
 
 export function MyCases() {
   const navigate = useNavigate();
   const { cases, loading } = useCases();
+  const [opinionCounts, setOpinionCounts] = useState<Record<string, number>>({});
+  const [countsLoading, setCountsLoading] = useState(false);
+
+  // Fetch opinions count for listed cases
+  useEffect(() => {
+    const fetchOpinionCounts = async () => {
+      if (!cases || cases.length === 0) {
+        setOpinionCounts({});
+        return;
+      }
+      try {
+        setCountsLoading(true);
+        const caseIds = cases.map(c => c.id);
+        const { data } = await supabase
+          .from('case_opinions')
+          .select('case_id, user_id')
+          .in('case_id', caseIds);
+        const counts: Record<string, number> = {};
+        const usersPerCase: Record<string, Set<string>> = {};
+        (data || []).forEach((row: any) => {
+          const cid = row.case_id as string;
+          const uid = row.user_id as string;
+          if (!usersPerCase[cid]) usersPerCase[cid] = new Set<string>();
+          usersPerCase[cid].add(uid);
+        });
+        Object.keys(usersPerCase).forEach(cid => {
+          counts[cid] = usersPerCase[cid].size;
+        });
+        setOpinionCounts(counts);
+      } catch (err) {
+        console.error('Failed to fetch opinion counts', err);
+      } finally {
+        setCountsLoading(false);
+      }
+    };
+    fetchOpinionCounts();
+  }, [cases]);
 
   return (
     <Layout>
@@ -38,6 +77,9 @@ export function MyCases() {
                   Cancer Type
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Opinions Submitted
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Created Date
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -63,6 +105,9 @@ export function MyCases() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                     {caseItem.cancerType}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                    {countsLoading ? '…' : (opinionCounts[caseItem.id] || 0)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                     {caseItem.createdDate}

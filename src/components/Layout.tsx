@@ -19,6 +19,13 @@ export function Layout({ children }: LayoutProps) {
 
   const isActive = (path: string) => location.pathname === path;
 
+  const greetingText = (() => {
+    const rawName = (user?.name && user.name.trim()) || (user?.email ? user.email.split('@')[0] : '');
+    if (!rawName) return '';
+    const formatted = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+    return `Hello, ${formatted}`;
+  })();
+
   return (
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
@@ -55,7 +62,7 @@ export function Layout({ children }: LayoutProps) {
             </div>
 
             <div className="flex items-center space-x-4">
-              <div className="text-sm text-gray-700">{user?.name}</div>
+              <div className="text-sm text-gray-700">{greetingText}</div>
               <button
                 onClick={handleLogout}
                 className="flex items-center space-x-2 px-3 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-100 transition-colors"

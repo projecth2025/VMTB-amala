@@ -49,7 +49,7 @@ export function ViewCase() {
       }
     };
     fetchCase();
-  }, [id, user?.id]);
+  }, [id, user?.id, getCaseById]);
 
   const handleSaveTreatment = async () => {
     if (!id) return;
@@ -58,7 +58,7 @@ export function ViewCase() {
       await updateCase(id, { treatmentPlan });
       setEditingTreatment(false);
       // Refetch case
-      const data = await getCaseById(id);
+      const data = await getCaseById(id!);
       setCaseData(data);
     } catch (err) {
       console.error('Failed to save treatment plan:', err);
@@ -74,7 +74,7 @@ export function ViewCase() {
       await updateCase(id, { followUp });
       setEditingFollowUp(false);
       // Refetch case
-      const data = await getCaseById(id);
+      const data = await getCaseById(id!);
       setCaseData(data);
     } catch (err) {
       console.error('Failed to save follow-up:', err);
@@ -96,7 +96,7 @@ export function ViewCase() {
       }
       setNewOpinion('');
       // Refetch case to show updated opinion
-      const data = await getCaseById(id);
+      const data = await getCaseById(id!);
       setCaseData(data);
     } catch (err) {
       console.error('Failed to submit opinion:', err);
@@ -127,7 +127,8 @@ export function ViewCase() {
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto">
+      <div className="w-full flex justify-center">
+        <div className="w-[80vw]">
         <div className="mb-6 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">{caseData.caseName}</h1>
           <div className="flex items-center space-x-2">
@@ -371,6 +372,7 @@ export function ViewCase() {
             </>
           )}
         </div>
+        </div>
       </div>
 
       <Modal
@@ -426,7 +428,7 @@ export function ViewCase() {
                   setEditingOpinionId(null);
                   setEditingOpinionText('');
                   // Refetch case
-                  const data = await getCaseById(id);
+                  const data = await getCaseById(id!);
                   setCaseData(data);
                 } catch (err) {
                   console.error('Failed to update opinion:', err);
