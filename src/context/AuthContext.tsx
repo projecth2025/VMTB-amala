@@ -25,22 +25,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const isAuthenticated = !!user;
 
-  const loadProfileName = async (id: string) => {
-    try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', id)
-        .single();
-      const name = (data as { full_name?: string } | null)?.full_name;
-      if (name) {
-        setUser(prev => (prev ? { ...prev, name } : prev));
-      }
-    } catch (_err) {
-      // Ignore missing profile; keep auth working without name
-    }
-  };
-
   useEffect(() => {
     // Load initial session
     supabase.auth.getSession().then(({ data }) => {
