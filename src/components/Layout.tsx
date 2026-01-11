@@ -20,7 +20,8 @@ export function Layout({ children }: LayoutProps) {
   const isActive = (path: string) => location.pathname === path;
 
   const greetingText = (() => {
-    const rawName = (user?.name && user.name.trim()) || (user?.email ? user.email.split('@')[0] : '');
+    const emailPrefix = user?.email ? user.email.split('@')[0] : '';
+    const rawName = (user?.name && user.name.trim()) || emailPrefix;
     if (!rawName) return '';
     const formatted = rawName.charAt(0).toUpperCase() + rawName.slice(1);
     return `Hello, ${formatted}`;
