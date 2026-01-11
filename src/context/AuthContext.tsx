@@ -25,6 +25,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const isAuthenticated = !!user;
 
+  const backfillProfileFromMetadata = async (id: string) => {
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const meta = (authData.user as any)?.user_metadata || {};
+      const fullName = meta.name as string | undefined;
+      const profession = meta.profession as string | undefined;
+      const hospital = meta.hospital as string | undefined;
+      const phone = meta.phone as string | undefined;
+
+      if (!fullName && !profession && !hospital && !phone) return;
+
+      await supabase.from('profiles').upsert({
+        id,
+        full_name: fullName,
+        profession,
+        hospital_name: hospital,
+        phone_number: phone,
+      }, { onConflict: 'id' });
+
+      if (fullName) {
+        setUser(prev => (prev ? { ...prev, name: fullName } : prev));
+      }
+    } catch (_err) {
+      // Ignore failures; do not block auth flow
+    }
+  };
+
+  const loadProfileName = async (id: string) => {
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', id)
+        .single();
+      const name = (data as { full_name?: string } | null)?.full_name;
+      if (name) {
+        setUser(prev => (prev ? { ...prev, name } : prev));
+      } else {
+        await backfillProfileFromMetadata(id);
+      }
+    } catch (_err) {
+      // Ignore missing profile; keep auth working without name
+      await backfillProfileFromMetadata(id);
+    }
+  };
+
   useEffect(() => {
     // Load initial session
     supabase.auth.getSession().then(({ data }) => {
