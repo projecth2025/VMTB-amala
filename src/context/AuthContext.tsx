@@ -25,18 +25,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const isAuthenticated = !!user;
 
+  const loadProfileName = async (id: string) => {
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', id)
+        .single();
+      const name = (data as { full_name?: string } | null)?.full_name;
+      if (name) {
+        setUser(prev => (prev ? { ...prev, name } : prev));
+      }
+    } catch (_err) {
+      // Ignore missing profile; keep auth working without name
+    }
+  };
+
   useEffect(() => {
     // Load initial session
     supabase.auth.getSession().then(({ data }) => {
       const u = data.session?.user;
-      if (u) setUser({ id: u.id, email: u.email ?? null });
+      if (u) {
+        setUser({ id: u.id, email: u.email ?? null, name: (u as any)?.user_metadata?.name });
+        // Fire-and-forget profile name fetch
+        loadProfileName(u.id);
+      }
       setLoading(false);
     });
     // Subscribe to auth state changes
     const { data: authSub } = supabase.auth.onAuthStateChange((_event, session) => {
       const u = session?.user;
       if (u) {
-        setUser({ id: u.id, email: u.email ?? null });
+        setUser({ id: u.id, email: u.email ?? null, name: (u as any)?.user_metadata?.name });
+        // Fire-and-forget profile name fetch
+        loadProfileName(u.id);
       } else {
         setUser(null);
       }
@@ -48,13 +70,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error, data } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
     const u = data.user;
-    if (u) setUser({ id: u.id, email: u.email ?? null });
+    if (u) {
+      setUser({ id: u.id, email: u.email ?? null, name: (u as any)?.user_metadata?.name });
+      // Fire-and-forget profile name fetch to avoid blocking UI
+      loadProfileName(u.id);
+    }
   };
 
   const signup = async ({ name, email, password, profession, hospital, phone }: {
     name: string; email: string; password: string; profession?: string; hospital?: string; phone?: string;
   }) => {
-    const { error, data } = await supabase.auth.signUp({ email, password });
+    const { error, data } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { name, profession, hospital, phone },
+      },
+    });
     if (error) throw error;
     const u = data.user;
     if (u) {
@@ -62,11 +94,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Create profile record
       await supabase.from('profiles').upsert({
         id: u.id,
-        email: u.email,
-        name,
+        full_name: name,
         profession,
-        hospital,
-        phone,
+        hospital_name: hospital,
+        phone_number: phone,
       }, { onConflict: 'id' });
     }
   };

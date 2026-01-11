@@ -17,6 +17,9 @@ export function MTBDetail() {
   const [mtbCases, setMtbCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [reviewedSet, setReviewedSet] = useState<Set<string>>(new Set());
+  const [opinionCounts, setOpinionCounts] = useState<Record<string, number>>({});
+  const [statsLoading, setStatsLoading] = useState(false);
 
   const mtb = mtbs.find((m) => m.id === id);
   const isOwner = mtb?.ownerId === user?.id;
@@ -43,12 +46,47 @@ export function MTBDetail() {
             id: row.id,
             caseName: row.case_name,
             patientName: row.patient_name,
-            age: row.age,
-            sex: row.sex,
+            age: row.patient_age,
+            sex: row.patient_sex,
             cancerType: row.cancer_type,
             createdDate: row.created_at.split('T')[0],
             ownerId: row.owner_id,
           })));
+          // Fetch stats: reviewed by user + opinions count
+          setStatsLoading(true);
+          try {
+            if (user?.id) {
+              const { data: userOpinions } = await supabase
+                .from('case_opinions')
+                .select('case_id')
+                .eq('user_id', user.id)
+                .in('case_id', caseIds);
+              const s = new Set<string>();
+              (userOpinions || []).forEach((row: any) => s.add(row.case_id));
+              setReviewedSet(s);
+            }
+
+            const { data: opinions } = await supabase
+              .from('case_opinions')
+              .select('case_id, user_id')
+              .in('case_id', caseIds);
+            const counts: Record<string, number> = {};
+            const usersPerCase: Record<string, Set<string>> = {};
+            (opinions || []).forEach((row: any) => {
+              const cid = row.case_id as string;
+              const uid = row.user_id as string;
+              if (!usersPerCase[cid]) usersPerCase[cid] = new Set<string>();
+              usersPerCase[cid].add(uid);
+            });
+            Object.keys(usersPerCase).forEach(cid => {
+              counts[cid] = usersPerCase[cid].size;
+            });
+            setOpinionCounts(counts);
+          } catch (err) {
+            console.error('Failed to fetch case stats', err);
+          } finally {
+            setStatsLoading(false);
+          }
         } else {
           setMtbCases([]);
         }
@@ -166,6 +204,8 @@ export function MTBDetail() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Cancer Type
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Opinions Submitted</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Created Date
                   </th>
@@ -188,6 +228,18 @@ export function MTBDetail() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                       {caseItem.cancerType}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                      {statsLoading ? '…' : (opinionCounts[caseItem.id] || 0)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      {caseItem.ownerId === user?.id ? (
+                        <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700">Owner</span>
+                      ) : reviewedSet.has(caseItem.id) ? (
+                        <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">Reviewed</span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700">Not Reviewed</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                       {caseItem.createdDate}
