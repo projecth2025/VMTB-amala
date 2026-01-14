@@ -88,12 +88,30 @@ export function Signup() {
                 required
               >
                 <option value="">Select profession</option>
-                <option value="oncologist">Oncologist</option>
-                <option value="pathologist">Pathologist</option>
-                <option value="radiologist">Radiologist</option>
-                <option value="surgeon">Surgeon</option>
-                <option value="researcher">Researcher</option>
-                <option value="other">Other</option>
+                <option value="Medical oncologist">Medical oncologist</option>
+                <option value="Surgical oncologist">Surgical oncologist</option>
+                <option value="Radiation oncologist">Radiation oncologist</option>
+                <option value="Hematologist-oncologist">Hematologist-oncologist</option>
+                <option value="Radiologist">Radiologist</option>
+                <option value="Pathologist">Pathologist</option>
+                <option value="Molecular pathologist">Molecular pathologist</option>
+                <option value="Medical physicist">Medical physicist</option>
+                <option value="Dosimetrist">Dosimetrist</option>
+                <option value="Radiation therapist">Radiation therapist</option>
+                <option value="Oncology nurse / staff nurse">Oncology nurse / staff nurse</option>
+                <option value="Infusion nurse">Infusion nurse</option>
+                <option value="Oncology pharmacist">Oncology pharmacist</option>
+                <option value="Palliative care specialist">Palliative care specialist</option>
+                <option value="Dietitian / oncology nutritionist">Dietitian / oncology nutritionist</option>
+                <option value="Genetic counselor">Genetic counselor</option>
+                <option value="Cardio-oncologist">Cardio-oncologist</option>
+                <option value="Pulmonologist">Pulmonologist</option>
+                <option value="Nephrologist">Nephrologist</option>
+                <option value="Hepatologist">Hepatologist</option>
+                <option value="Endocrinologist">Endocrinologist</option>
+                <option value="Oral surgeon">Oral surgeon</option>
+                <option value="Administrative staff">Administrative staff</option>
+                <option value="Geneticist">Geneticist</option>
               </select>
             </div>
 

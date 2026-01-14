@@ -4,18 +4,74 @@ import { Layout } from '../components/Layout';
 import { supabase } from '../Supabase/client';
 
 const cancerTypes = [
-  'Lung Adenocarcinoma',
-  'Lung Squamous Cell Carcinoma',
+  'Acute Lymphoblastic Leukemia',
+  'Acute Myeloid Leukemia',
+  'Ampullary Adenocarcinoma',
+  'Anal Carcinoma',
+  'Appendiceal Neoplasms and Cancers',
+  'Basal Cell Skin Cancer',
+  'B-Cell Lymphomas',
+  'Biliary Tract Cancers',
+  'Bladder Cancer',
+  'Bone Cancer',
   'Breast Cancer',
-  'Colorectal Cancer',
-  'Prostate Cancer',
-  'Melanoma',
-  'Pancreatic Cancer',
+  'Castleman Disease',
+  'Central Nervous System Cancers',
+  'Cervical Cancer',
+  'Chronic Lymphocytic Leukemia/Small Lymphocytic Lymphoma',
+  'Chronic Myeloid Leukemia',
+  'Colon Cancer',
+  'Cutaneous Lymphomas',
+  'Dermatofibrosarcoma Protuberans',
+  'Esophageal and Esophagogastric Junction Cancers',
   'Gastric Cancer',
-  'Ovarian Cancer',
+  'Gastrointestinal Stromal Tumors',
+  'Gestational Trophoblastic Neoplasia',
+  'Hairy Cell Leukemia',
+  'Head and Neck Cancers',
+  'Hepatobiliary Cancers',
   'Hepatocellular Carcinoma',
-  'Renal Cell Carcinoma',
-  'Glioblastoma',
+  'Histiocytic Neoplasms',
+  'Hodgkin Lymphoma',
+  'Kaposi Sarcoma',
+  'Kidney Cancer',
+  'Melanoma: Cutaneous',
+  'Melanoma: Uveal',
+  'Merkel Cell Carcinoma',
+  'Mesothelioma: Peritoneal',
+  'Mesothelioma: Pleural',
+  'Multiple Myeloma',
+  'Myelodysplastic Syndromes',
+  'Myeloid/Lymphoid Neoplasms with Eosinophilia and Tyrosine Kinase Gene Fusions',
+  'Myeloproliferative Neoplasms',
+  'Neuroblastoma',
+  'Neuroendocrine and Adrenal Tumors',
+  'Non-Small Cell Lung Cancer',
+  'Occult Primary',
+  'Ovarian Cancer/Fallopian Tube Cancer/Primary Peritoneal Cancer',
+  'Pancreatic Adenocarcinoma',
+  'Pediatric Acute Lymphoblastic Leukemia',
+  'Pediatric Aggressive Mature B-Cell Lymphomas',
+  'Pediatric Central Nervous System Cancers',
+  'Pediatric Hodgkin Lymphoma',
+  'Penile Cancer',
+  'Prostate Cancer',
+  'Rectal Cancer',
+  'Small Bowel Adenocarcinoma',
+  'Small Cell Lung Cancer',
+  'Soft Tissue Sarcoma',
+  'Squamous Cell Skin Cancer',
+  'Systemic Light Chain Amyloidosis',
+  'Systemic Mastocytosis',
+  'T-Cell Lymphomas',
+  'Testicular Cancer',
+  'Thymomas and Thymic Carcinomas',
+  'Thyroid Carcinoma',
+  'Uterine Neoplasms',
+  'Vaginal Cancer',
+  'Vulvar Cancer',
+  'Waldenström Macroglobulinemia/Lymphoplasmacytic Lymphoma',
+  'Wilms Tumor (Nephroblastoma)',
   'Other',
 ];
 
@@ -55,6 +111,7 @@ export function NewCaseStep1() {
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showCustomInput, setShowCustomInput] = useState(false);
 
   // Auto-generate case name when cancer type changes
   useEffect(() => {
@@ -177,20 +234,22 @@ export function NewCaseStep1() {
               <label htmlFor="cancerType" className="block text-sm font-medium text-gray-700 mb-1">
                 Cancer Type <span className="text-red-500">*</span>
               </label>
-              <select
+              <input
                 id="cancerType"
+                type="text"
+                list="cancerTypesList"
                 value={formData.cancerType}
                 onChange={(e) => setFormData({ ...formData, cancerType: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Type or select cancer type"
                 required
-              >
-                <option value="">Select cancer type</option>
+              />
+              <datalist id="cancerTypesList">
                 {cancerTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
+                  <option key={type} value={type} />
                 ))}
-              </select>
+              </datalist>
+              <p className="text-xs text-gray-500 mt-1">Start typing to see suggestions or enter your own</p>
             </div>
 
             <div className="flex justify-end space-x-3 pt-4">
