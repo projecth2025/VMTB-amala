@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { FileText, MessageSquare, Edit2 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Layout } from '../components/Layout';
 import { Modal } from '../components/Modal';
 import { useCases, Case, Opinion } from '../context/CasesContext';
@@ -21,12 +23,50 @@ export function ViewCase() {
   const [editingOpinionText, setEditingOpinionText] = useState('');
   const [editingTreatment, setEditingTreatment] = useState(false);
   const [editingFollowUp, setEditingFollowUp] = useState(false);
+  const [summaryDraft, setSummaryDraft] = useState('');
+  const [savingSummary, setSavingSummary] = useState(false);
+  const [editingSummary, setEditingSummary] = useState(false);
+  
+  // Refs for synchronized scrolling
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const isScrolling = useRef<'editor' | 'preview' | null>(null);
+
+  // Synchronized scroll handler
+  const handleEditorScroll = useCallback(() => {
+    if (isScrolling.current === 'preview') return;
+    isScrolling.current = 'editor';
+    
+    const editor = editorRef.current;
+    const preview = previewRef.current;
+    if (!editor || !preview) return;
+    
+    const editorScrollRatio = editor.scrollTop / (editor.scrollHeight - editor.clientHeight);
+    preview.scrollTop = editorScrollRatio * (preview.scrollHeight - preview.clientHeight);
+    
+    setTimeout(() => { isScrolling.current = null; }, 50);
+  }, []);
+
+  const handlePreviewScroll = useCallback(() => {
+    if (isScrolling.current === 'editor') return;
+    isScrolling.current = 'preview';
+    
+    const editor = editorRef.current;
+    const preview = previewRef.current;
+    if (!editor || !preview) return;
+    
+    const previewScrollRatio = preview.scrollTop / (preview.scrollHeight - preview.clientHeight);
+    editor.scrollTop = previewScrollRatio * (editor.scrollHeight - editor.clientHeight);
+    
+    setTimeout(() => { isScrolling.current = null; }, 50);
+  }, []);
 
   const isOwner = caseData?.ownerId === user?.id;
   const viewMode = isOwner ? 'owner' : 'visitor';
   
   // Check if current user has already submitted an opinion
   const userOpinion = caseData?.opinions?.find(o => o.authorUserId === user?.id);
+  const isProcessingSummary = caseData?.summary === null || caseData?.summary === undefined;
 
   useEffect(() => {
     const fetchCase = async () => {
@@ -35,6 +75,7 @@ export function ViewCase() {
       try {
         const data = await getCaseById(id);
         setCaseData(data);
+        setSummaryDraft(data?.summary || '');
         setTreatmentPlan(data?.treatmentPlan || '');
         setFollowUp(data?.followUp || '');
         // If user already has opinion, set it for potential editing
@@ -105,6 +146,21 @@ export function ViewCase() {
     }
   };
 
+  const handleSaveSummary = async () => {
+    if (!id || !isOwner) return;
+    setSavingSummary(true);
+    try {
+      await updateCase(id, { summary: summaryDraft });
+      const data = await getCaseById(id!);
+      setCaseData(data);
+      setSummaryDraft(data?.summary || '');
+    } catch (err) {
+      console.error('Failed to save summary:', err);
+    } finally {
+      setSavingSummary(false);
+    }
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -134,6 +190,9 @@ export function ViewCase() {
           <div className="flex items-center space-x-2">
             <span className={`px-3 py-1 rounded-full text-sm ${isOwner ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
               {isOwner ? 'Owner' : 'Visitor'}
+            </span>
+            <span className={`px-3 py-1 rounded-full text-sm ${isProcessingSummary ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+              {isProcessingSummary ? 'Processing' : 'Summary Ready'}
             </span>
           </div>
         </div>
@@ -192,8 +251,154 @@ export function ViewCase() {
           )}
 
           <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Case Summary</h3>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">{caseData.summary}</p>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">Case Summary</h3>
+              <div className="flex items-center space-x-2">
+                {isProcessingSummary && (
+                  <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700">Processing</span>
+                )}
+                {!isProcessingSummary && isOwner && !editingSummary && (
+                  <button
+                    onClick={() => {
+                      setSummaryDraft(caseData.summary || '');
+                      setEditingSummary(true);
+                    }}
+                    className="flex items-center space-x-1 px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    <span>Edit</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {isProcessingSummary ? (
+              <div className="space-y-3">
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <p className="text-sm font-medium text-yellow-800 mb-2">
+                    ⏳ Summary is being generated
+                  </p>
+                  <p className="text-sm text-yellow-700">
+                    This may take up to 5 minutes. Please refresh the page after some time to see the summary.
+                  </p>
+                </div>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+                >
+                  Refresh Page
+                </button>
+              </div>
+            ) : editingSummary ? (
+              <div className="space-y-4">
+                {/* Editor and Preview side by side */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Markdown Editor */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Edit (Markdown)</label>
+                    <textarea
+                      ref={editorRef}
+                      value={summaryDraft}
+                      onChange={(e) => setSummaryDraft(e.target.value)}
+                      onScroll={handleEditorScroll}
+                      className="w-full h-96 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                      placeholder="Enter markdown content..."
+                    />
+                  </div>
+                  {/* Live Preview */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Preview</label>
+                    <div
+                      ref={previewRef}
+                      onScroll={handlePreviewScroll}
+                      className="h-96 overflow-y-auto bg-gray-50 p-4 rounded-md border border-gray-200">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          h1: ({node, ...props}) => <h1 className="text-2xl font-bold text-gray-900 mb-3 mt-4 first:mt-0" {...props} />,
+                          h2: ({node, ...props}) => <h2 className="text-xl font-bold text-gray-900 mb-2 mt-3 first:mt-0" {...props} />,
+                          h3: ({node, ...props}) => <h3 className="text-lg font-bold text-gray-900 mb-2 mt-3 first:mt-0" {...props} />,
+                          h4: ({node, ...props}) => <h4 className="text-base font-bold text-gray-900 mb-1 mt-2 first:mt-0" {...props} />,
+                          p: ({node, ...props}) => <p className="text-gray-800 mb-3 leading-relaxed text-sm" {...props} />,
+                          ul: ({node, ...props}) => <ul className="list-disc list-outside ml-5 text-gray-800 mb-3 space-y-1 text-sm" {...props} />,
+                          ol: ({node, ...props}) => <ol className="list-decimal list-outside ml-5 text-gray-800 mb-3 space-y-1 text-sm" {...props} />,
+                          li: ({node, ...props}) => <li className="text-gray-800" {...props} />,
+                          strong: ({node, ...props}) => <strong className="font-bold text-gray-900" {...props} />,
+                          em: ({node, ...props}) => <em className="italic text-gray-800" {...props} />,
+                          hr: ({node, ...props}) => <hr className="my-4 border-gray-300" {...props} />,
+                        }}
+                      >
+                        {summaryDraft || 'Start typing to see preview...'}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                </div>
+                {/* Action Buttons */}
+                <div className="flex space-x-2">
+                  <button
+                    onClick={async () => {
+                      setSavingSummary(true);
+                      try {
+                        await updateCase(id!, { summary: summaryDraft });
+                        const data = await getCaseById(id!);
+                        setCaseData(data);
+                        setEditingSummary(false);
+                      } catch (err) {
+                        console.error('Failed to save summary:', err);
+                      } finally {
+                        setSavingSummary(false);
+                      }
+                    }}
+                    disabled={savingSummary}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {savingSummary ? 'Saving...' : 'Save Changes'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSummaryDraft(caseData.summary || '');
+                      setEditingSummary(false);
+                    }}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-gray-50 p-6 rounded-md border border-gray-200">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    h1: ({node, ...props}) => <h1 className="text-3xl font-bold text-gray-900 mb-4 mt-6 first:mt-0" {...props} />,
+                    h2: ({node, ...props}) => <h2 className="text-2xl font-bold text-gray-900 mb-3 mt-5 first:mt-0" {...props} />,
+                    h3: ({node, ...props}) => <h3 className="text-xl font-bold text-gray-900 mb-2 mt-4 first:mt-0" {...props} />,
+                    h4: ({node, ...props}) => <h4 className="text-lg font-bold text-gray-900 mb-2 mt-3 first:mt-0" {...props} />,
+                    p: ({node, ...props}) => <p className="text-gray-800 mb-4 leading-relaxed" {...props} />,
+                    ul: ({node, ...props}) => <ul className="list-disc list-outside ml-6 text-gray-800 mb-4 space-y-2" {...props} />,
+                    ol: ({node, ...props}) => <ol className="list-decimal list-outside ml-6 text-gray-800 mb-4 space-y-2" {...props} />,
+                    li: ({node, ...props}) => <li className="text-gray-800" {...props} />,
+                    strong: ({node, ...props}) => <strong className="font-bold text-gray-900" {...props} />,
+                    em: ({node, ...props}) => <em className="italic text-gray-800" {...props} />,
+                    code: ({node, inline, ...props}) => 
+                      inline ? 
+                        <code className="bg-gray-300 px-2 py-1 rounded text-sm font-mono text-gray-900" {...props} /> :
+                        <code className="block bg-gray-900 text-gray-100 p-4 rounded-md mb-4 overflow-x-auto font-mono text-sm" {...props} />,
+                    pre: ({node, ...props}) => <pre className="bg-gray-900 text-gray-100 p-4 rounded-md mb-4 overflow-x-auto" {...props} />,
+                    blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-blue-500 pl-4 italic text-gray-700 my-4 py-2" {...props} />,
+                    table: ({node, ...props}) => <table className="border-collapse border border-gray-400 mb-4 w-full" {...props} />,
+                    thead: ({node, ...props}) => <thead className="bg-gray-200" {...props} />,
+                    tbody: ({node, ...props}) => <tbody {...props} />,
+                    th: ({node, ...props}) => <th className="border border-gray-400 px-4 py-2 text-gray-900 font-bold text-left" {...props} />,
+                    td: ({node, ...props}) => <td className="border border-gray-400 px-4 py-2 text-gray-800" {...props} />,
+                    a: ({node, ...props}) => <a className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />,
+                    hr: ({node, ...props}) => <hr className="my-6 border-gray-300" {...props} />,
+                  }}
+                >
+                  {caseData.summary || 'No summary yet...'}
+                </ReactMarkdown>
+              </div>
+            )}
           </div>
 
           {caseData.questions && caseData.questions.length > 0 && (

@@ -47,7 +47,7 @@ export function MyCases() {
   }, [cases]);
 
   return (
-    <Layout>
+    <Layout wide>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">My Cases</h1>
@@ -77,6 +77,9 @@ export function MyCases() {
                   Cancer Type
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Summary Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Opinions Submitted
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -89,9 +92,9 @@ export function MyCases() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">Loading cases...</td></tr>
+                <tr><td colSpan={8} className="px-6 py-8 text-center text-gray-500">Loading cases...</td></tr>
               ) : cases.length === 0 ? (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">No cases yet. Create your first case!</td></tr>
+                <tr><td colSpan={8} className="px-6 py-8 text-center text-gray-500">No cases yet. Create your first case!</td></tr>
               ) : cases.map((caseItem) => (
                 <tr key={caseItem.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
@@ -105,6 +108,17 @@ export function MyCases() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                     {caseItem.cancerType}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <span className={`px-2 py-1 rounded-full text-xs ${
+                      caseItem.summary === null || caseItem.summary === undefined || caseItem.processing
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      {caseItem.summary === null || caseItem.summary === undefined || caseItem.processing
+                        ? 'Processing'
+                        : 'Ready'}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                     {countsLoading ? '…' : (opinionCounts[caseItem.id] || 0)}

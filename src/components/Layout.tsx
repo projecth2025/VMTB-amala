@@ -5,9 +5,10 @@ import { useAuth } from '../context/AuthContext';
 
 interface LayoutProps {
   children: ReactNode;
+  wide?: boolean;
 }
 
-export function Layout({ children }: LayoutProps) {
+export function Layout({ children, wide = false }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, user } = useAuth();
@@ -76,7 +77,7 @@ export function Layout({ children }: LayoutProps) {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className={`${wide ? 'max-w-screen-2xl' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8 py-8`}>
         {children}
       </main>
     </div>

@@ -113,6 +113,13 @@ export function NewCaseStep1() {
   const [loading, setLoading] = useState(false);
   const [showCustomInput, setShowCustomInput] = useState(false);
 
+  // Clear any previous case draft data when entering Step 1
+  useEffect(() => {
+    sessionStorage.removeItem('newCaseStep1');
+    sessionStorage.removeItem('newCaseDocuments');
+    sessionStorage.removeItem('newCaseTextFragments');
+  }, []);
+
   // Auto-generate case name when cancer type changes
   useEffect(() => {
     const generateName = async () => {

@@ -10,7 +10,8 @@ export interface Case {
   sex: string;
   cancerType: string;
   createdDate: string;
-  summary?: string;
+  summary?: string | null;
+  processing?: boolean | null;
   questions?: string[];
   opinions?: Opinion[];
   documents?: Document[];
@@ -34,6 +35,7 @@ export interface Document {
   size: string;
   type: 'NGS' | 'Clinical' | 'Text';
   storagePath?: string;
+  mimeType?: string;
 }
 
 export interface MTB {
@@ -51,7 +53,12 @@ interface CasesContextType {
   loading: boolean;
   refetchCases: () => Promise<void>;
   refetchMTBs: () => Promise<void>;
-  createCase: (caseData: Omit<Case, 'id' | 'createdDate' | 'ownerId'>, documents: Document[], questions: string[]) => Promise<string>;
+  createCase: (
+    caseData: Omit<Case, 'id' | 'createdDate' | 'ownerId'> & { processing?: boolean },
+    documents: Document[],
+    questions: string[],
+    shareWithMtbIds?: string[],
+  ) => Promise<{ caseId: string; createdAt: string }>;
   updateCase: (id: string, updates: Partial<Case>) => Promise<void>;
   createMTB: (name: string) => Promise<void>;
   joinMTB: (joinCode: string) => Promise<void>;
@@ -88,6 +95,7 @@ export function CasesProvider({ children }: { children: ReactNode }) {
         cancerType: row.cancer_type,
         createdDate: row.created_at.split('T')[0],
         summary: row.summary,
+        processing: row.processing,
         treatmentPlan: row.treatment_plan,
         followUp: row.follow_up,
         finalized: row.finalized,
@@ -160,10 +168,11 @@ export function CasesProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const createCase = async (
-    caseData: Omit<Case, 'id' | 'createdDate' | 'ownerId'>,
+    caseData: Omit<Case, 'id' | 'createdDate' | 'ownerId'> & { processing?: boolean },
     documents: Document[],
-    questions: string[]
-  ): Promise<string> => {
+    questions: string[],
+    shareWithMtbIds: string[] = [],
+  ): Promise<{ caseId: string; createdAt: string }> => {
     if (!user) throw new Error('User not authenticated');
     const { data, error } = await supabase
       .from('cases')
@@ -174,7 +183,8 @@ export function CasesProvider({ children }: { children: ReactNode }) {
         patient_age: caseData.age,
         patient_sex: caseData.sex,
         cancer_type: caseData.cancerType,
-        summary: caseData.summary,
+        summary: caseData.summary ?? null,
+        processing: caseData.processing ?? false,
         finalized: caseData.finalized || false,
       })
       .select()
@@ -203,18 +213,39 @@ export function CasesProvider({ children }: { children: ReactNode }) {
       if (qError) throw qError;
     }
 
+    // Share with selected MTBs in one batch
+    if (shareWithMtbIds.length > 0) {
+      const shareRows = shareWithMtbIds.map(mtbId => ({ case_id: caseId, mtb_id: mtbId }));
+      const { error: shareError } = await supabase.from('mtb_cases').insert(shareRows);
+      if (shareError) throw shareError;
+    }
+
     await refetchCases();
-    return caseId;
+    if (shareWithMtbIds.length > 0) {
+      await refetchMTBs();
+    }
+
+    return { caseId, createdAt: data.created_at };
   };
 
   const updateCase = async (id: string, updates: Partial<Case>) => {
+    if (!user) throw new Error('User not authenticated');
     const dbUpdates: any = {};
     if (updates.summary !== undefined) dbUpdates.summary = updates.summary;
     if (updates.treatmentPlan !== undefined) dbUpdates.treatment_plan = updates.treatmentPlan;
     if (updates.followUp !== undefined) dbUpdates.follow_up = updates.followUp;
     if (updates.finalized !== undefined) dbUpdates.finalized = updates.finalized;
 
-    const { error } = await supabase.from('cases').update(dbUpdates).eq('id', id);
+    if (updates.summary !== undefined) {
+      dbUpdates.processing = false;
+    }
+
+    const query = supabase.from('cases').update(dbUpdates).eq('id', id);
+    if (user) {
+      query.eq('owner_id', user.id);
+    }
+
+    const { error } = await query;
     if (error) throw error;
     await refetchCases();
   };
@@ -295,6 +326,7 @@ export function CasesProvider({ children }: { children: ReactNode }) {
       cancerType: caseRow.cancer_type,
       createdDate: caseRow.created_at.split('T')[0],
       summary: caseRow.summary,
+      processing: caseRow.processing,
       treatmentPlan: caseRow.treatment_plan,
       followUp: caseRow.follow_up,
       finalized: caseRow.finalized,
@@ -305,6 +337,7 @@ export function CasesProvider({ children }: { children: ReactNode }) {
         size: d.size,
         type: d.type,
         storagePath: d.storage_path,
+        mimeType: d.mime_type,
       })),
       questions: (questions || []).map(q => q.question_text),
       opinions: (opinions || []).map(o => ({

@@ -46,6 +46,7 @@ CREATE TABLE cases (
   sex TEXT NOT NULL,
   cancer_type TEXT NOT NULL,
   summary TEXT,
+  processing BOOLEAN DEFAULT FALSE,
   treatment_plan TEXT,
   follow_up TEXT,
   finalized BOOLEAN DEFAULT FALSE,
@@ -58,10 +59,11 @@ CREATE TABLE cases (
 CREATE TABLE case_documents (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   case_id UUID REFERENCES cases(id) ON DELETE CASCADE,
-  type TEXT NOT NULL, -- 'NGS', 'Clinical', or 'Text'
-  filename TEXT NOT NULL,
+  type TEXT NOT NULL,
+  file_name TEXT NOT NULL,
   size TEXT,
   storage_path TEXT,
+  mime_type TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
