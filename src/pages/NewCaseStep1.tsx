@@ -174,21 +174,7 @@ export function NewCaseStep1() {
         <div className="bg-white rounded-lg shadow p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">{error}</div>}
-            <div>
-              <label htmlFor="caseName" className="block text-sm font-medium text-gray-700 mb-1">
-                Case Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="caseName"
-                type="text"
-                value={formData.caseName}
-                onChange={(e) => setFormData({ ...formData, caseName: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Auto-generated based on cancer type"
-                required
-              />
-            </div>
-
+            
             <div>
               <label htmlFor="patientName" className="block text-sm font-medium text-gray-700 mb-1">
                 Patient Name (Optional)
@@ -257,6 +243,22 @@ export function NewCaseStep1() {
                 ))}
               </datalist>
               <p className="text-xs text-gray-500 mt-1">Start typing to see suggestions or enter your own</p>
+            </div>
+
+            <div>
+              <label htmlFor="caseName" className="block text-sm font-medium text-gray-700 mb-1">
+                Case Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="caseName"
+                type="text"
+                value={formData.caseName}
+                onChange={(e) => setFormData({ ...formData, caseName: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Auto-generated based on cancer type"
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1">Auto-generated from cancer type and date. You can modify if needed.</p>
             </div>
 
             <div className="flex justify-end space-x-3 pt-4">

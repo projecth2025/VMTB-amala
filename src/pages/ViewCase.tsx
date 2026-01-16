@@ -220,7 +220,7 @@ export function ViewCase() {
             </div>
           </div>
 
-          {caseData.documents && caseData.documents.length > 0 && (
+          {/* {caseData.documents && caseData.documents.length > 0 && (
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Documents</h3>
               <div className="space-y-2">
@@ -248,7 +248,7 @@ export function ViewCase() {
                 ))}
               </div>
             </div>
-          )}
+          )} */}
 
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between mb-4">
