@@ -142,7 +142,7 @@ export function MTBDetail() {
   }
 
   return (
-    <Layout>
+    <Layout wide>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
@@ -195,9 +195,11 @@ export function MTBDetail() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Case Name
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Patient Name
-                  </th>
+                  {isOwner && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Patient Name
+                    </th>
+                  )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Patient Info
                   </th>
@@ -220,9 +222,11 @@ export function MTBDetail() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {caseItem.caseName}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                      {caseItem.patientName || 'Anonymous'}
-                    </td>
+                    {isOwner && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {caseItem.patientName || 'Anonymous'}
+                      </td>
+                    )}
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                       {caseItem.age}Y, {caseItem.sex}
                     </td>
@@ -234,7 +238,7 @@ export function MTBDetail() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       {caseItem.ownerId === user?.id ? (
-                        <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700">Owner</span>
+                        <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700">YOU</span>
                       ) : reviewedSet.has(caseItem.id) ? (
                         <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">Reviewed</span>
                       ) : (
