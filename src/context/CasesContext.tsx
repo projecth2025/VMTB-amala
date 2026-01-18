@@ -60,8 +60,10 @@ interface CasesContextType {
     shareWithMtbIds?: string[],
   ) => Promise<{ caseId: string; createdAt: string }>;
   updateCase: (id: string, updates: Partial<Case>) => Promise<void>;
+  deleteCase: (id: string) => Promise<void>;
   createMTB: (name: string) => Promise<void>;
   joinMTB: (joinCode: string) => Promise<void>;
+  leaveMTB: (mtbId: string) => Promise<void>;
   addCaseToMTB: (mtbId: string, caseId: string) => Promise<void>;
   addOpinion: (caseId: string, content: string) => Promise<void>;
   updateOpinion: (opinionId: string, content: string) => Promise<void>;
@@ -250,6 +252,36 @@ export function CasesProvider({ children }: { children: ReactNode }) {
     await refetchCases();
   };
 
+  const deleteCase = async (id: string) => {
+    if (!user) throw new Error('User not authenticated');
+    
+    // Verify ownership
+    const { data: caseData, error: fetchError } = await supabase
+      .from('cases')
+      .select('owner_id')
+      .eq('id', id)
+      .single();
+    
+    if (fetchError || !caseData) throw new Error('Case not found');
+    if (caseData.owner_id !== user.id) throw new Error('Only the owner can delete this case');
+
+    // Delete related data in correct order (respecting foreign keys)
+    // 1. Delete opinions
+    await supabase.from('case_opinions').delete().eq('case_id', id);
+    // 2. Delete questions
+    await supabase.from('case_questions').delete().eq('case_id', id);
+    // 3. Delete documents metadata
+    await supabase.from('case_documents').delete().eq('case_id', id);
+    // 4. Remove from all MTBs
+    await supabase.from('mtb_cases').delete().eq('case_id', id);
+    // 5. Delete the case itself
+    const { error } = await supabase.from('cases').delete().eq('id', id).eq('owner_id', user.id);
+    if (error) throw error;
+    
+    await refetchCases();
+    await refetchMTBs();
+  };
+
   const createMTB = async (name: string) => {
     if (!user) throw new Error('User not authenticated');
     // Check if user already owns an MTB
@@ -270,13 +302,32 @@ export function CasesProvider({ children }: { children: ReactNode }) {
     if (!user) throw new Error('User not authenticated');
     const { data: mtb, error: mtbError } = await supabase
       .from('mtbs')
-      .select('id')
+      .select('id, owner_id')
       .eq('join_code', joinCode)
       .maybeSingle();
     if (mtbError) throw mtbError;
     if (!mtb) throw new Error('Invalid join code');
+    
+    // Prevent owner from joining their own MTB
+    if (mtb.owner_id === user.id) {
+      throw new Error('You cannot join your own MTB');
+    }
 
     const { error } = await supabase.from('mtb_members').insert({ mtb_id: mtb.id, user_id: user.id });
+    if (error) throw error;
+    await refetchMTBs();
+  };
+
+  const leaveMTB = async (mtbId: string) => {
+    if (!user) throw new Error('User not authenticated');
+    
+    // Remove user from mtb_members
+    const { error } = await supabase
+      .from('mtb_members')
+      .delete()
+      .eq('mtb_id', mtbId)
+      .eq('user_id', user.id);
+    
     if (error) throw error;
     await refetchMTBs();
   };
@@ -360,8 +411,10 @@ export function CasesProvider({ children }: { children: ReactNode }) {
         refetchMTBs,
         createCase,
         updateCase,
+        deleteCase,
         createMTB,
         joinMTB,
+        leaveMTB,
         addCaseToMTB,
         addOpinion,
         updateOpinion,

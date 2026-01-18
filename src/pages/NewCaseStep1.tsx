@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { supabase } from '../Supabase/client';
+import { useCaseCreation } from '../context/CaseCreationContext';
 
 const cancerTypes = [
   'Acute Lymphoblastic Leukemia',
@@ -102,34 +103,38 @@ const generateCaseName = async (cancerType: string): Promise<string> => {
 
 export function NewCaseStep1() {
   const navigate = useNavigate();
+  const { step1Data, setStep1Data, clearAll } = useCaseCreation();
   const [formData, setFormData] = useState({
-    caseName: '',
-    patientName: '',
-    age: '',
-    sex: '',
-    cancerType: '',
+    caseName: step1Data?.caseName || '',
+    patientName: step1Data?.patientName || '',
+    age: step1Data?.age || '',
+    sex: step1Data?.sex || '',
+    cancerType: step1Data?.cancerType || '',
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [isNewCase, setIsNewCase] = useState(!step1Data);
 
-  // Clear any previous case draft data when entering Step 1
+  // Only clear data when starting a completely new case (not coming back from step 2)
   useEffect(() => {
-    sessionStorage.removeItem('newCaseStep1');
-    sessionStorage.removeItem('newCaseDocuments');
-    sessionStorage.removeItem('newCaseTextFragments');
+    // Check if we're coming back from step 2 or starting fresh
+    const fromStep2 = sessionStorage.getItem('fromStep2');
+    if (fromStep2) {
+      sessionStorage.removeItem('fromStep2');
+      setIsNewCase(false);
+    }
   }, []);
 
-  // Auto-generate case name when cancer type changes
+  // Auto-generate case name when cancer type changes (only for new cases or when cancer type changes)
   useEffect(() => {
     const generateName = async () => {
-      if (formData.cancerType) {
+      if (formData.cancerType && isNewCase) {
         const generatedName = await generateCaseName(formData.cancerType);
         setFormData(prev => ({ ...prev, caseName: generatedName }));
       }
     };
     generateName();
-  }, [formData.cancerType]);
+  }, [formData.cancerType, isNewCase]);
 
   const isCaseNameUnique = async (caseName: string): Promise<boolean> => {
     const { data, error: dbError } = await supabase
@@ -154,7 +159,8 @@ export function NewCaseStep1() {
         return;
       }
       
-      sessionStorage.setItem('newCaseStep1', JSON.stringify(formData));
+      // Save to context instead of sessionStorage
+      setStep1Data(formData);
       navigate('/cases/new/step-2');
     } catch (err: any) {
       setError(err?.message || 'Failed to validate case name');
@@ -264,7 +270,10 @@ export function NewCaseStep1() {
             <div className="flex justify-end space-x-3 pt-4">
               <button
                 type="button"
-                onClick={() => navigate('/my-cases')}
+                onClick={() => {
+                  clearAll();
+                  navigate('/my-cases');
+                }}
                 className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 Cancel

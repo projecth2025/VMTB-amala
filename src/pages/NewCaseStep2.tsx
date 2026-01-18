@@ -1,42 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Plus, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { Modal } from '../components/Modal';
-import { Document } from '../context/CasesContext';
-import { supabase } from '../Supabase/client';
-
-interface PendingFile {
-  id: string;
-  file: File;
-  type: 'Clinical' | 'Text';
-  name: string;
-  size: string;
-  mimeType?: string;
-  rawText?: string;
-}
+import { useCaseCreation, PendingFile } from '../context/CaseCreationContext';
 
 export function NewCaseStep2() {
   const navigate = useNavigate();
-  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+  const { pendingFiles, addFiles, removeFile, step1Data } = useCaseCreation();
   const [showTextModal, setShowTextModal] = useState(false);
   const [textContent, setTextContent] = useState('');
   const [textTitle, setTextTitle] = useState('');
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // IMPORTANT: Clear any old textFragments when entering Step 2
-  // This ensures no stale data from previous case creation
-  useEffect(() => {
-    sessionStorage.removeItem('newCaseTextFragments');
-    sessionStorage.removeItem('newCaseDocuments');
-  }, []);
+  // Redirect to step 1 if no step1 data
+  if (!step1Data) {
+    navigate('/cases/new/step-1');
+    return null;
+  }
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files) return;
 
-    // Process all selected files
+    setError(null);
     const newPendingFiles: PendingFile[] = [];
 
     for (let i = 0; i < files.length; i++) {
@@ -64,16 +51,29 @@ export function NewCaseStep2() {
       newPendingFiles.push(pendingFile);
     }
 
-    // Add all new files to the list
-    setPendingFiles(prev => [...prev, ...newPendingFiles]);
+    // Add files with duplicate check
+    const result = addFiles(newPendingFiles);
+    if (!result.success) {
+      setError(`File(s) with the same name already uploaded: ${result.duplicates.join(', ')}`);
+    }
+    
     event.target.value = ''; // Reset input to allow same file again
   };
 
   const handleSaveText = () => {
     if (!textContent.trim()) return;
     
+    const fileName = `${textTitle || 'text_document'}.txt`;
+    
+    // Check for duplicate
+    const existingNames = new Set(pendingFiles.map(f => f.name.toLowerCase()));
+    if (existingNames.has(fileName.toLowerCase())) {
+      setError(`File with name "${fileName}" already exists. Please use a different title.`);
+      return;
+    }
+    
     const blob = new Blob([textContent], { type: 'text/plain' });
-    const file = new File([blob], `${textTitle || 'text_document'}.txt`, { type: 'text/plain' });
+    const file = new File([blob], fileName, { type: 'text/plain' });
     
     const pendingFile: PendingFile = {
       id: Date.now().toString(),
@@ -84,66 +84,22 @@ export function NewCaseStep2() {
       mimeType: 'text/plain',
       rawText: textContent,
     };
-    setPendingFiles(prev => [...prev, pendingFile]);
+    
+    addFiles([pendingFile]);
     setTextContent('');
     setTextTitle('');
     setShowTextModal(false);
-  };
-
-  const removeDocument = (id: string) => {
-    setPendingFiles(pendingFiles.filter(file => file.id !== id));
-  };
-
-  const handleNext = async () => {
-    const textFragments = pendingFiles.map(f => f.rawText).filter(Boolean) as string[];
-
-    if (pendingFiles.length === 0) {
-      // No files uploaded - clear all data and start fresh
-      sessionStorage.removeItem('newCaseDocuments');
-      sessionStorage.removeItem('newCaseTextFragments');
-      navigate('/cases/review');
-      return;
-    }
-
-    setUploading(true);
     setError(null);
-    
-    try {
-      // Upload all files simultaneously using Promise.all
-      const uploadPromises = pendingFiles.map(async (pending) => {
-        const fileName = `${Date.now()}_${pending.file.name}`;
-        const { data, error: uploadError } = await supabase.storage
-          .from('case-documents')
-          .upload(fileName, pending.file);
-        
-        if (uploadError) throw uploadError;
-        
-        return {
-          id: pending.id,
-          name: pending.name,
-          size: pending.size,
-          type: pending.type,
-          storagePath: data.path,
-          mimeType: pending.mimeType || pending.file.type,
-        };
-      });
-      
-      // Wait for all uploads to complete
-      const uploadedDocuments = await Promise.all(uploadPromises);
-      
-      // Only set textFragments if there are actual fragments
-      if (textFragments.length > 0) {
-        sessionStorage.setItem('newCaseTextFragments', JSON.stringify(textFragments));
-      } else {
-        sessionStorage.removeItem('newCaseTextFragments');
-      }
-      sessionStorage.setItem('newCaseDocuments', JSON.stringify(uploadedDocuments));
-      navigate('/cases/review');
-    } catch (err: any) {
-      setError(err?.message || 'Upload failed');
-    } finally {
-      setUploading(false);
-    }
+  };
+
+  const handleNext = () => {
+    navigate('/cases/review');
+  };
+
+  const handleBack = () => {
+    // Mark that we're going back to step 1
+    sessionStorage.setItem('fromStep2', 'true');
+    navigate('/cases/new/step-1');
   };
 
   return (
@@ -155,7 +111,12 @@ export function NewCaseStep2() {
         </div>
 
         <div className="space-y-6">
-          {error && <div className="text-red-600 text-sm">{error}</div>}
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
+              {error}
+            </div>
+          )}
+          
           <div className="grid grid-cols-2 gap-4">
             <label className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-500 hover:bg-blue-50 transition-all group cursor-pointer">
               <input type="file" multiple className="hidden" onChange={handleFileUpload} accept="*" />
@@ -201,7 +162,7 @@ export function NewCaseStep2() {
                         {doc.type}
                       </span>
                       <button
-                        onClick={() => removeDocument(doc.id)}
+                        onClick={() => removeFile(doc.id)}
                         className="text-red-500 hover:text-red-700"
                       >
                         <X className="w-4 h-4" />
@@ -215,17 +176,16 @@ export function NewCaseStep2() {
 
           <div className="flex justify-end space-x-3">
             <button
-              onClick={() => navigate('/cases/new/step-1')}
+              onClick={handleBack}
               className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
             >
               Back
             </button>
             <button
               onClick={handleNext}
-              disabled={uploading}
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
             >
-              {uploading ? 'Uploading...' : 'Next'}
+              Next
             </button>
           </div>
         </div>

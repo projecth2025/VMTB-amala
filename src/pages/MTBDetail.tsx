@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Eye, Copy, Check } from 'lucide-react';
+import { Plus, Eye, Copy, Check, LogOut } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { Modal } from '../components/Modal';
 import { useCases, Case } from '../context/CasesContext';
@@ -10,7 +10,7 @@ import { useAuth } from '../context/AuthContext';
 export function MTBDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { cases, mtbs, addCaseToMTB } = useCases();
+  const { cases, mtbs, addCaseToMTB, leaveMTB } = useCases();
   const { user } = useAuth();
   const [showAddCaseModal, setShowAddCaseModal] = useState(false);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
@@ -20,6 +20,7 @@ export function MTBDetail() {
   const [reviewedSet, setReviewedSet] = useState<Set<string>>(new Set());
   const [opinionCounts, setOpinionCounts] = useState<Record<string, number>>({});
   const [statsLoading, setStatsLoading] = useState(false);
+  const [leavingMTB, setLeavingMTB] = useState(false);
 
   const mtb = mtbs.find((m) => m.id === id);
   const isOwner = mtb?.ownerId === user?.id;
@@ -164,13 +165,37 @@ export function MTBDetail() {
               </div>
             )}
           </div>
-          <button
-            onClick={() => setShowAddCaseModal(true)}
-            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-5 h-5" />
-            <span>Add Case</span>
-          </button>
+          <div className="flex items-center space-x-3">
+            {!isOwner && (
+              <button
+                onClick={async () => {
+                  if (!id) return;
+                  if (!confirm('Are you sure you want to leave this MTB? Your opinions will be preserved.')) return;
+                  setLeavingMTB(true);
+                  try {
+                    await leaveMTB(id);
+                    navigate('/mtbs');
+                  } catch (err) {
+                    console.error('Failed to leave MTB:', err);
+                  } finally {
+                    setLeavingMTB(false);
+                  }
+                }}
+                disabled={leavingMTB}
+                className="flex items-center space-x-2 border border-red-300 text-red-600 px-4 py-2 rounded-md hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                <LogOut className="w-5 h-5" />
+                <span>{leavingMTB ? 'Leaving...' : 'Leave MTB'}</span>
+              </button>
+            )}
+            <button
+              onClick={() => setShowAddCaseModal(true)}
+              className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Add Case</span>
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -195,18 +220,13 @@ export function MTBDetail() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Case Name
                   </th>
-                  {isOwner && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Patient Name
-                    </th>
-                  )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Patient Info
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Cancer Type
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Opinions Submitted</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Opinions</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Created Date
@@ -222,11 +242,6 @@ export function MTBDetail() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {caseItem.caseName}
                     </td>
-                    {isOwner && (
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        {caseItem.patientName || 'Anonymous'}
-                      </td>
-                    )}
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                       {caseItem.age}Y, {caseItem.sex}
                     </td>
@@ -250,7 +265,7 @@ export function MTBDetail() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <button
-                        onClick={() => navigate(`/case/${caseItem.id}`)}
+                        onClick={() => navigate(`/case/${caseItem.id}?from=mtb`)}
                         className="flex items-center space-x-1 text-blue-600 hover:text-blue-700"
                       >
                         <Eye className="w-4 h-4" />

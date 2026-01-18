@@ -1,79 +1,38 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, Plus, X } from 'lucide-react';
+import { AlertTriangle, Plus, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
-import { Modal } from '../components/Modal';
 import { Document } from '../context/CasesContext';
 import { useCases } from '../context/CasesContext';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../Supabase/client';
+import { useCaseCreation } from '../context/CaseCreationContext';
 
 export function ReviewCase() {
   const navigate = useNavigate();
   const { createCase, mtbs } = useCases();
   const { user } = useAuth();
-  const [step1Data, setStep1Data] = useState<{ caseName: string; patientName?: string; age: string; sex: string; cancerType: string } | null>(null);
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [textFragments, setTextFragments] = useState<string[]>([]);
+  const { step1Data, pendingFiles, clearAll } = useCaseCreation();
   const [questions, setQuestions] = useState<string[]>([]);
   const [newQuestion, setNewQuestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedMtbIds, setSelectedMtbIds] = useState<string[]>([]);
-  const [showProcessingModal, setShowProcessingModal] = useState(false);
-  const [createdCaseId, setCreatedCaseId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const step1Raw = sessionStorage.getItem('newCaseStep1');
-    const docsRaw = sessionStorage.getItem('newCaseDocuments');
-    const textRaw = sessionStorage.getItem('newCaseTextFragments');
+  // Redirect if no step1 data
+  if (!step1Data) {
+    navigate('/cases/new/step-1');
+    return null;
+  }
 
-    if (step1Raw) {
-      try {
-        setStep1Data(JSON.parse(step1Raw));
-      } catch (_err) {
-        setError('Unable to read patient details. Please restart case creation.');
-      }
-    } else {
-      setError('Patient details missing. Please restart case creation.');
-    }
-
-    if (docsRaw) {
-      try {
-        setDocuments(JSON.parse(docsRaw));
-      } catch (_err) {
-        setDocuments([]);
-      }
-    }
-
-    if (textRaw) {
-      try {
-        const parsed = JSON.parse(textRaw);
-        // STRICT CHECK: Only use if it's a valid non-empty array with actual content
-        if (Array.isArray(parsed) && parsed.length > 0 && parsed.some(item => item && String(item).trim())) {
-          setTextFragments(parsed);
-        } else {
-          setTextFragments([]);
-        }
-      } catch (_err) {
-        setTextFragments([]);
-      }
-    } else {
-      // Ensure no stale data from previous case
-      setTextFragments([]);
-    }
-  }, []);
-
-  // User can optionally share with MTBs - no auto-selection required
+  // Get text fragments from pending files (Text type)
+  const textFragments = pendingFiles
+    .filter(f => f.type === 'Text' && f.rawText)
+    .map(f => f.rawText as string);
+  
+  // Get clinical documents from pending files
+  const clinicalFiles = pendingFiles.filter(f => f.type === 'Clinical');
 
   const additionalData = useMemo(() => textFragments.join('\n\n').trim(), [textFragments]);
-
-  useEffect(() => {
-    if (!step1Data) return;
-    if (!step1Data.caseName) {
-      setError('Case name is missing. Please restart case creation.');
-    }
-  }, [step1Data]);
 
   const addQuestion = () => {
     if (newQuestion.trim()) {
@@ -96,6 +55,8 @@ export function ReviewCase() {
     caseId: string;
     createdAt: string;
     ownerId: string;
+    files: typeof clinicalFiles;
+    additionalData: string;
   }) => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
     
@@ -109,32 +70,17 @@ export function ReviewCase() {
       
       // Add additional_data (doctor-written text) separately - NOT as a file
       // This will be sent directly to AI API without conversion
-      if (additionalData) {
-        formData.append('additional_data', additionalData);
+      if (params.additionalData) {
+        formData.append('additional_data', params.additionalData);
       }
       
-      // Add only clinical documents (uploaded files) - NOT text data
-      // Text data is sent separately via additional_data
-      for (const doc of documents) {
-        if (doc.storagePath && doc.type === 'Clinical') {
-          // Only process Clinical documents, skip Text type
-          // Download file from Supabase storage
-          const { data: fileData, error: downloadError } = await supabase.storage
-            .from('case-documents')
-            .download(doc.storagePath);
-          
-          if (downloadError) {
-            console.error(`Failed to download ${doc.name}:`, downloadError);
-            continue;
-          }
-          
-          // Create File object from blob
-          const file = new File([fileData], doc.name, { type: doc.mimeType || 'application/octet-stream' });
-          formData.append('files', file);
-        }
+      // Add clinical documents from captured files (not from context)
+      // Files are sent directly from user's browser - no Supabase download needed
+      for (const pendingFile of params.files) {
+        formData.append('files', pendingFile.file, pendingFile.name);
       }
       
-      console.log('Sending files to backend for processing...');
+      console.log('Sending files directly to backend for processing...');
       
       const response = await fetch(`${backendUrl}/process-case`, {
         method: 'POST',
@@ -155,9 +101,7 @@ export function ReviewCase() {
   };
 
   const clearCaseDraft = () => {
-    sessionStorage.removeItem('newCaseStep1');
-    sessionStorage.removeItem('newCaseDocuments');
-    sessionStorage.removeItem('newCaseTextFragments');
+    clearAll();
   };
 
   const handleCreateCase = async () => {
@@ -167,6 +111,20 @@ export function ReviewCase() {
       if (!step1Data || !user) {
         throw new Error('Missing required data. Please restart case creation.');
       }
+
+      // Capture files BEFORE clearing context - these will be used for backend upload
+      const filesToUpload = [...clinicalFiles];
+      const additionalDataToSend = additionalData;
+
+      // Convert pending files to Document format for metadata storage (no actual file upload to Supabase)
+      const documentsMetadata: Document[] = pendingFiles.map(pf => ({
+        id: pf.id,
+        name: pf.name,
+        size: pf.size,
+        type: pf.type,
+        storagePath: '', // No storage path since we're not uploading to Supabase
+        mimeType: pf.mimeType,
+      }));
 
       const { caseId, createdAt } = await createCase(
         {
@@ -179,15 +137,25 @@ export function ReviewCase() {
           finalized: false,
           processing: true,
         },
-        documents,
+        documentsMetadata,
         questions,
         selectedMtbIds,
       );
 
-      setCreatedCaseId(caseId);
-      setShowProcessingModal(true);
+      // Clear context AFTER capturing files, but BEFORE async processing
       clearCaseDraft();
-      void triggerAsyncProcessing({ caseId, createdAt, ownerId: user.id });
+      
+      // Upload files to backend - uses captured files, not context
+      void triggerAsyncProcessing({ 
+        caseId, 
+        createdAt, 
+        ownerId: user.id,
+        files: filesToUpload,
+        additionalData: additionalDataToSend,
+      });
+
+      // Redirect to My Cases page immediately after case creation
+      navigate('/my-cases');
     } catch (err: any) {
       setError(err?.message || 'Failed to create case');
     } finally {
@@ -247,11 +215,11 @@ export function ReviewCase() {
                 Edit uploads
               </button>
             </div>
-            {documents.length === 0 ? (
+            {pendingFiles.length === 0 ? (
               <p className="text-sm text-gray-500">No documents uploaded.</p>
             ) : (
               <div className="space-y-2">
-                {documents.map((doc) => (
+                {pendingFiles.map((doc) => (
                   <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
                     <div>
                       <p className="text-sm font-medium text-gray-900">{doc.name}</p>
@@ -261,8 +229,6 @@ export function ReviewCase() {
                       className={`px-2 py-1 text-xs rounded-full ${
                         doc.type === 'Clinical'
                           ? 'bg-blue-100 text-blue-700'
-                          : doc.type === 'NGS'
-                          ? 'bg-green-100 text-green-700'
                           : 'bg-gray-100 text-gray-700'
                       }`}
                     >
@@ -383,51 +349,6 @@ export function ReviewCase() {
           </div>
         </div>
       </div>
-
-      <Modal
-        isOpen={showProcessingModal}
-        onClose={() => {
-          setShowProcessingModal(false);
-          navigate('/my-cases');
-        }}
-        title="Case Created Successfully"
-      >
-        <div className="space-y-4">
-          <div className="flex items-center text-green-700">
-            <CheckCircle2 className="w-5 h-5 mr-2" />
-            <p className="font-medium">Your case has been created</p>
-          </div>
-          <p className="text-sm text-gray-700">
-            Your case is being processed. This may take up to 5 minutes.
-            Please refresh the page later to see the summary.
-          </p>
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-            <p className="text-sm text-blue-800">
-              <strong>What happens next:</strong>
-            </p>
-            <ul className="text-sm text-blue-700 mt-2 list-disc list-inside space-y-1">
-              <li>Files are being sent to AI processing</li>
-              <li>Summary will be generated automatically</li>
-              <li>You can view your case in "My Cases" anytime</li>
-              <li>Refresh the case page after 5 minutes to see results</li>
-            </ul>
-          </div>
-          {createdCaseId && (
-            <p className="text-xs text-gray-500">Case ID: {createdCaseId}</p>
-          )}
-          <div className="flex justify-end">
-            <button
-              onClick={() => {
-                setShowProcessingModal(false);
-                navigate('/my-cases');
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              Go to My Cases
-            </button>
-          </div>
-        </div>
-      </Modal>
     </Layout>
   );
 }

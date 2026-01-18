@@ -1,19 +1,27 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
-import { FileText, MessageSquare, Edit2 } from 'lucide-react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { FileText, MessageSquare, Edit2, Trash2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Layout } from '../components/Layout';
 import { Modal } from '../components/Modal';
 import { useCases, Case, Opinion } from '../context/CasesContext';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../Supabase/client';
+
+type TabType = 'summary' | 'reports' | 'opinions' | 'result';
 
 export function ViewCase() {
   const { id } = useParams();
-  const { getCaseById, updateCase, addOpinion, updateOpinion } = useCases();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { getCaseById, updateCase, addOpinion, updateOpinion, deleteCase } = useCases();
   const { user } = useAuth();
   const [caseData, setCaseData] = useState<Case | null>(null);
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabType>('summary');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [treatmentPlan, setTreatmentPlan] = useState('');
   const [followUp, setFollowUp] = useState('');
   const [newOpinion, setNewOpinion] = useState('');
@@ -161,6 +169,23 @@ export function ViewCase() {
     }
   };
 
+  const handleDeleteCase = async () => {
+    if (!id || !isOwner) return;
+    setDeleting(true);
+    try {
+      await deleteCase(id);
+      navigate('/my-cases');
+    } catch (err) {
+      console.error('Failed to delete case:', err);
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
+  // Check if viewing from MTB context (hide patient name)
+  const fromMTB = searchParams.get('from') === 'mtb';
+
   if (loading) {
     return (
       <Layout>
@@ -185,11 +210,12 @@ export function ViewCase() {
     <Layout>
       <div className="w-full flex justify-center">
         <div className="w-[80vw]">
+        {/* Header */}
         <div className="mb-6 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">{caseData.caseName}</h1>
           <div className="flex items-center space-x-2">
             <span className={`px-3 py-1 rounded-full text-sm ${isOwner ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
-              {isOwner ? 'Owner' : 'Visitor'}
+              {isOwner ? 'You' : 'Visitor'}
             </span>
             <span className={`px-3 py-1 rounded-full text-sm ${isProcessingSummary ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
               {isProcessingSummary ? 'Processing' : 'Summary Ready'}
@@ -197,28 +223,56 @@ export function ViewCase() {
           </div>
         </div>
 
+        {/* Tab Navigation */}
+        <div className="border-b border-gray-200 mb-6">
+          <nav className="-mb-px flex space-x-8">
+            {(['summary', 'reports', 'opinions', 'result'] as TabType[]).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === tab
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                {tab === 'summary' ? 'Case Summary' : 
+                 tab === 'reports' ? 'Reports' :
+                 tab === 'opinions' ? 'Opinions' : 'Result'}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* Tab Content */}
         <div className="space-y-6">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Patient Information</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-600">Patient Name:</span>{' '}
-                <span className="font-medium">{caseData.patientName || 'Anonymous'}</span>
+          {/* === CASE SUMMARY TAB === */}
+          {activeTab === 'summary' && (
+            <>
+              {/* Patient Information - hide patient name if from MTB */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Patient Information</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  {!fromMTB && (
+                    <div>
+                      <span className="text-gray-600">Patient Name:</span>{' '}
+                      <span className="font-medium">{caseData.patientName || 'Anonymous'}</span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-gray-600">Age:</span>{' '}
+                    <span className="font-medium">{caseData.age} years</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Sex:</span>{' '}
+                    <span className="font-medium">{caseData.sex}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Cancer Type:</span>{' '}
+                    <span className="font-medium">{caseData.cancerType}</span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <span className="text-gray-600">Age:</span>{' '}
-                <span className="font-medium">{caseData.age} years</span>
-              </div>
-              <div>
-                <span className="text-gray-600">Sex:</span>{' '}
-                <span className="font-medium">{caseData.sex}</span>
-              </div>
-              <div>
-                <span className="text-gray-600">Cancer Type:</span>{' '}
-                <span className="font-medium">{caseData.cancerType}</span>
-              </div>
-            </div>
-          </div>
 
           {/* {caseData.documents && caseData.documents.length > 0 && (
             <div className="bg-white rounded-lg shadow p-6">
@@ -250,7 +304,8 @@ export function ViewCase() {
             </div>
           )} */}
 
-          <div className="bg-white rounded-lg shadow p-6">
+              {/* Case Summary Section */}
+              <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900">Case Summary</h3>
               <div className="flex items-center space-x-2">
@@ -401,184 +456,298 @@ export function ViewCase() {
             )}
           </div>
 
-          {caseData.questions && caseData.questions.length > 0 && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Questions</h3>
-              <div className="space-y-2">
-                {caseData.questions.map((question, index) => (
-                  <div key={index} className="flex items-start space-x-2">
-                    <span className="text-blue-600 font-medium">{index + 1}.</span>
-                    <p className="text-sm text-gray-700">{question}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Submitted Opinions</h3>
-            {caseData.opinions && caseData.opinions.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {caseData.opinions.map((opinion) => (
-                  <div
-                    key={opinion.id}
-                    onClick={() => setSelectedOpinion(opinion)}
-                    className="p-4 border border-gray-200 rounded-md hover:border-blue-500 cursor-pointer transition-colors"
-                  >
-                    <div className="flex items-center space-x-2 mb-2">
-                      <MessageSquare className="w-4 h-4 text-blue-600" />
-                      <span className="text-sm font-medium text-gray-900">{opinion.author}</span>
-                    </div>
-                    <p className="text-xs text-gray-500 mb-2">{opinion.date}</p>
-                    <p className="text-sm text-gray-700 line-clamp-3">{opinion.content}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500">No opinions submitted yet</p>
-            )}
-          </div>
-
-          {viewMode === 'visitor' && (
-            <div className="bg-white rounded-lg shadow p-6">
-              {userOpinion ? (
-                <>
-                  <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
-                    <p className="text-sm text-blue-800 font-medium">You have already given your opinion</p>
-                  </div>
-                  <div className="mb-4 p-4 bg-gray-50 rounded-md border border-gray-200">
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{userOpinion.content}</p>
-                    <p className="text-xs text-gray-500 mt-2">Submitted on {userOpinion.date}</p>
-                  </div>
+              {/* Delete Case Button - Owner Only */}
+              {isOwner && (
+                <div className="bg-white rounded-lg shadow p-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Danger Zone</h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Permanently delete this case and all associated data. This action cannot be undone.
+                  </p>
                   <button
-                    onClick={() => {
-                      setEditingOpinionId(userOpinion.id);
-                      setEditingOpinionText(userOpinion.content);
-                    }}
-                    className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
                   >
-                    <Edit2 className="w-4 h-4" />
-                    <span>Edit Opinion</span>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete Case</span>
                   </button>
-                </>
-              ) : (
-                <>
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Submit Your Opinion</h3>
-                  <textarea
-                    value={newOpinion}
-                    onChange={(e) => setNewOpinion(e.target.value)}
-                    rows={6}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-                    placeholder="Share your expert opinion on this case..."
-                  />
-                  <button
-                    onClick={handleSubmitOpinion}
-                    disabled={submitting}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {submitting ? 'Submitting...' : 'Submit Opinion'}
-                  </button>
-                </>
+                </div>
               )}
-            </div>
+            </>
           )}
 
-          {viewMode === 'owner' && (
+          {/* === REPORTS TAB === */}
+          {activeTab === 'reports' && (
+            <>
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Uploaded Reports</h3>
+                {caseData.documents && caseData.documents.length > 0 ? (
+                  <div className="space-y-2">
+                    {caseData.documents.filter(d => d.type === 'Clinical').map((doc) => (
+                      <div key={doc.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-md">
+                        <FileText className="w-5 h-5 text-blue-500" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{doc.name}</p>
+                          <p className="text-xs text-gray-500">{doc.size}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">No reports uploaded.</p>
+                )}
+              </div>
+
+              {/* Doctor Written Notes - Show Full Content */}
+              {caseData.documents && caseData.documents.filter(d => d.type === 'Text').length > 0 && (
+                <div className="bg-white rounded-lg shadow p-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Doctor Notes</h3>
+                  <div className="space-y-4">
+                    {caseData.documents.filter(d => d.type === 'Text').map((doc) => (
+                      <div key={doc.id} className="p-4 bg-gray-50 rounded-md border border-gray-200">
+                        <p className="text-sm font-medium text-gray-900 mb-2">{doc.name}</p>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                          {/* Note: For text documents, the content would need to be stored/fetched separately */}
+                          Document content available in case summary.
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* === OPINIONS TAB === */}
+          {activeTab === 'opinions' && (
+            <>
+              {/* Questions */}
+              {caseData.questions && caseData.questions.length > 0 && (
+                <div className="bg-white rounded-lg shadow p-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Questions from Case Owner</h3>
+                  <div className="space-y-2">
+                    {caseData.questions.map((question, index) => (
+                      <div key={index} className="flex items-start space-x-2 p-3 bg-gray-50 rounded-md">
+                        <span className="text-blue-600 font-medium">{index + 1}.</span>
+                        <p className="text-sm text-gray-700">{question}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* All Opinions */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Submitted Opinions</h3>
+                {caseData.opinions && caseData.opinions.length > 0 ? (
+                  <div className="space-y-4">
+                    {caseData.opinions.map((opinion) => (
+                      <div
+                        key={opinion.id}
+                        onClick={() => setSelectedOpinion(opinion)}
+                        className="p-4 border border-gray-200 rounded-md hover:border-blue-500 cursor-pointer transition-colors"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <MessageSquare className="w-4 h-4 text-blue-600" />
+                            <span className="text-sm font-medium text-gray-900">{opinion.author}</span>
+                          </div>
+                          <p className="text-xs text-gray-500">{opinion.date}</p>
+                        </div>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{opinion.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">No opinions submitted yet</p>
+                )}
+              </div>
+
+              {/* Submit Opinion - Visitors Only */}
+              {viewMode === 'visitor' && (
+                <div className="bg-white rounded-lg shadow p-6">
+                  {userOpinion ? (
+                    <>
+                      <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
+                        <p className="text-sm text-blue-800 font-medium">You have already given your opinion</p>
+                      </div>
+                      <div className="mb-4 p-4 bg-gray-50 rounded-md border border-gray-200">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{userOpinion.content}</p>
+                        <p className="text-xs text-gray-500 mt-2">Submitted on {userOpinion.date}</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setEditingOpinionId(userOpinion.id);
+                          setEditingOpinionText(userOpinion.content);
+                        }}
+                        className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                        <span>Edit Opinion</span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <h3 className="text-lg font-medium text-gray-900 mb-4">Submit Your Opinion</h3>
+                      <textarea
+                        value={newOpinion}
+                        onChange={(e) => setNewOpinion(e.target.value)}
+                        rows={6}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                        placeholder="Share your expert opinion on this case..."
+                      />
+                      <button
+                        onClick={handleSubmitOpinion}
+                        disabled={submitting}
+                        className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {submitting ? 'Submitting...' : 'Submit Opinion'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* === RESULT TAB === */}
+          {activeTab === 'result' && (
             <>
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Treatment Plan Adopted</h3>
-                {editingTreatment || !caseData.treatmentPlan ? (
-                  <>
-                    <textarea
-                      value={treatmentPlan}
-                      onChange={(e) => setTreatmentPlan(e.target.value)}
-                      rows={4}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-                      placeholder="Document the treatment plan you've decided to adopt..."
-                    />
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={handleSaveTreatment}
-                        disabled={submitting}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {submitting ? 'Saving...' : 'Save'}
-                      </button>
-                      {caseData.treatmentPlan && (
+                {isOwner ? (
+                  editingTreatment || !caseData.treatmentPlan ? (
+                    <>
+                      <textarea
+                        value={treatmentPlan}
+                        onChange={(e) => setTreatmentPlan(e.target.value)}
+                        rows={4}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                        placeholder="Document the treatment plan you've decided to adopt..."
+                      />
+                      <div className="flex space-x-2">
                         <button
-                          onClick={() => {
-                            setTreatmentPlan(caseData.treatmentPlan || '');
-                            setEditingTreatment(false);
-                          }}
-                          className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                          onClick={handleSaveTreatment}
+                          disabled={submitting}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          Cancel
+                          {submitting ? 'Saving...' : 'Save'}
                         </button>
-                      )}
-                    </div>
-                  </>
+                        {caseData.treatmentPlan && (
+                          <button
+                            onClick={() => {
+                              setTreatmentPlan(caseData.treatmentPlan || '');
+                              setEditingTreatment(false);
+                            }}
+                            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap mb-4">{caseData.treatmentPlan}</p>
+                      <button
+                        onClick={() => setEditingTreatment(true)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                      >
+                        Edit
+                      </button>
+                    </>
+                  )
                 ) : (
-                  <>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap mb-4">{caseData.treatmentPlan}</p>
-                    <button
-                      onClick={() => setEditingTreatment(true)}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                    >
-                      Edit
-                    </button>
-                  </>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {caseData.treatmentPlan || 'No treatment plan documented yet.'}
+                  </p>
                 )}
               </div>
 
               <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Follow-Up</h3>
-                {editingFollowUp || !caseData.followUp ? (
-                  <>
-                    <textarea
-                      value={followUp}
-                      onChange={(e) => setFollowUp(e.target.value)}
-                      rows={4}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-                      placeholder="Add follow-up notes, patient progress, treatment response..."
-                    />
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={handleSaveFollowUp}
-                        disabled={submitting}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {submitting ? 'Saving...' : 'Save'}
-                      </button>
-                      {caseData.followUp && (
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Follow-Ups</h3>
+                {isOwner ? (
+                  editingFollowUp || !caseData.followUp ? (
+                    <>
+                      <textarea
+                        value={followUp}
+                        onChange={(e) => setFollowUp(e.target.value)}
+                        rows={4}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                        placeholder="Add follow-up notes, patient progress, treatment response..."
+                      />
+                      <div className="flex space-x-2">
                         <button
-                          onClick={() => {
-                            setFollowUp(caseData.followUp || '');
-                            setEditingFollowUp(false);
-                          }}
-                          className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                          onClick={handleSaveFollowUp}
+                          disabled={submitting}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          Cancel
+                          {submitting ? 'Saving...' : 'Save'}
                         </button>
-                      )}
-                    </div>
-                  </>
+                        {caseData.followUp && (
+                          <button
+                            onClick={() => {
+                              setFollowUp(caseData.followUp || '');
+                              setEditingFollowUp(false);
+                            }}
+                            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap mb-4">{caseData.followUp}</p>
+                      <button
+                        onClick={() => setEditingFollowUp(true)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                      >
+                        Edit
+                      </button>
+                    </>
+                  )
                 ) : (
-                  <>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap mb-4">{caseData.followUp}</p>
-                    <button
-                      onClick={() => setEditingFollowUp(true)}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                    >
-                      Edit
-                    </button>
-                  </>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {caseData.followUp || 'No follow-up notes documented yet.'}
+                  </p>
                 )}
               </div>
             </>
           )}
+
         </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        title="Delete Case"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            This case will be permanently deleted and cannot be recovered. All associated documents, opinions, and questions will also be removed.
+          </p>
+          <p className="text-sm font-medium text-gray-900">Do you want to continue?</p>
+          <div className="flex justify-end space-x-3">
+            <button
+              onClick={() => setShowDeleteConfirm(false)}
+              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDeleteCase}
+              disabled={deleting}
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
+            >
+              {deleting ? 'Deleting...' : 'Delete Case'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         isOpen={!!selectedOpinion}

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CasesProvider } from './context/CasesContext';
+import { CaseCreationProvider } from './context/CaseCreationContext';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { ForgotPassword } from './pages/ForgotPassword';
@@ -32,11 +33,12 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <CasesProvider>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
+          <CaseCreationProvider>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
 
             <Route
               path="/my-cases"
@@ -97,9 +99,10 @@ function App() {
 
             <Route path="/" element={<Navigate to="/login" />} />
           </Routes>
-        </CasesProvider>
-      </AuthProvider>
-    </BrowserRouter>
+        </CaseCreationProvider>
+      </CasesProvider>
+    </AuthProvider>
+  </BrowserRouter>
   );
 }
 

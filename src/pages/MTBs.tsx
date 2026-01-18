@@ -57,7 +57,7 @@ export function MTBs() {
   };
 
   return (
-    <Layout>
+    <Layout wide>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">Molecular Tumor Boards</h1>
@@ -98,7 +98,7 @@ export function MTBs() {
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-900">{mtb.name}</h3>
                     {isOwner && (
-                      <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">Owner</span>
+                      <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">You</span>
                     )}
                   </div>
                   <div className="space-y-2">
