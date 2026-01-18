@@ -226,7 +226,7 @@ export function ViewCase() {
         {/* Tab Navigation */}
         <div className="border-b border-gray-200 mb-6">
           <nav className="-mb-px flex space-x-8">
-            {(['summary', 'reports', 'opinions', 'result'] as TabType[]).map((tab) => (
+            {(['summary', 'opinions', 'result'] as TabType[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
